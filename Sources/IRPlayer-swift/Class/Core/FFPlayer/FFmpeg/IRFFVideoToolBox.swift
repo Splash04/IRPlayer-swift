@@ -214,7 +214,7 @@ class IRFFVideoToolBox {
 
     deinit {
         self.flush()
-        IRPlayerImp.Logger.libraryLoger.debug("IRFFVideoToolBox release")
+        IRPlayerImp.Logger.libraryLogger.debug("IRFFVideoToolBox release")
     }
 
     private static let outputCallback: VTDecompressionOutputCallback = { (

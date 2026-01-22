@@ -42,7 +42,7 @@ class IRSensor {
 
             var doScroll = true
             if self.referenceAttitude == nil {
-                IRPlayerImp.Logger.libraryLoger.debug("referenceAttitude nil")
+                IRPlayerImp.Logger.libraryLogger.debug("referenceAttitude nil")
                 self.referenceAttitude = motion.attitude.copy() as? CMAttitude
                 lastOffsetXByDeviceMotion = 0
                 lastOffsetYByDeviceMotion = 0
@@ -119,7 +119,7 @@ class IRSensor {
                     return
                 }
                 if doScroll {
-                    IRPlayerImp.Logger.libraryLoger.debug("scrollBy dx: \(dx * UIScreen.main.scale), dy: \(dy * UIScreen.main.scale)")
+                    IRPlayerImp.Logger.libraryLogger.debug("scrollBy dx: \(dx * UIScreen.main.scale), dy: \(dy * UIScreen.main.scale)")
                     self.smoothScroll?.shiftDegreeX(Float(dx), degreeY: Float(dy))
                 }
             }

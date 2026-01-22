@@ -70,7 +70,7 @@ class IRGLFish2PanoShaderParams: IRGLShaderParams {
 
         let texnum = antialias * antialias
         guard texnum > 0 && texnum <= 9 else {
-            IRPlayerImp.Logger.libraryLoger.debug("Antialias level should be an integer between 1 and 3.")
+            IRPlayerImp.Logger.libraryLogger.debug("Antialias level should be an integer between 1 and 3.")
             return
         }
 

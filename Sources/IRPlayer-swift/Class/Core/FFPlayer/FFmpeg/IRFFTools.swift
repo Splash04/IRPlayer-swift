@@ -25,11 +25,11 @@ enum IRFFDecoderErrorCode: Int {
 }
 
 func IRFFErrorLog(_ text: String) {
-    IRPlayerImp.Logger.libraryLoger.warning(text)
+    IRPlayerImp.Logger.libraryLogger.warning(text)
 }
 
 func IRPlayerLog(_ text: String) {
-    IRPlayerImp.Logger.libraryLoger.debug(text)
+    IRPlayerImp.Logger.libraryLogger.debug(text)
 }
 
 // MARK: - Utility Functions
@@ -37,7 +37,7 @@ func IRPlayerLog(_ text: String) {
 func IRFFLog(context: UnsafeMutableRawPointer?, level: Int32, format: UnsafePointer<CChar>, args: CVaListPointer) {
 #if IRFFFFmpegLogEnable
     let message = NSString(format: NSString(utf8String: format)! as String, arguments: args) as String
-    IRPlayerImp.Logger.libraryLoger.debug("IRFFLog: \(message)")
+    IRPlayerImp.Logger.libraryLogger.debug("IRFFLog: \(message)")
 #endif
 }
 

@@ -109,7 +109,7 @@ public class IRGLView: UIView, IRFFDecoderVideoOutput {
             context = setupContext()
 
             guard let context = context, EAGLContext.setCurrent(context) else {
-                IRPlayerImp.Logger.libraryLoger.warning("Failed to setup EAGLContext")
+                IRPlayerImp.Logger.libraryLogger.warning("Failed to setup EAGLContext")
                 return
             }
 
@@ -124,20 +124,20 @@ public class IRGLView: UIView, IRFFDecoderVideoOutput {
 
             let status = glCheckFramebufferStatus(GLenum(GL_FRAMEBUFFER))
             if status != GL_FRAMEBUFFER_COMPLETE {
-                IRPlayerImp.Logger.libraryLoger.warning("Failed to make complete framebuffer object \(status)")
+                IRPlayerImp.Logger.libraryLogger.warning("Failed to make complete framebuffer object \(status)")
                 return
             }
 
             let glError = glGetError()
             if glError != GL_NO_ERROR {
-                IRPlayerImp.Logger.libraryLoger.warning("Failed to setup GL \(glError)")
+                IRPlayerImp.Logger.libraryLogger.warning("Failed to setup GL \(glError)")
                 return
             }
         }
 
         viewprotRange = CGRect(x: 0, y: 0, width: Int(backingWidth), height: Int(backingHeight))
         setupModes()
-        IRPlayerImp.Logger.libraryLoger.debug("OK setup GL")
+        IRPlayerImp.Logger.libraryLogger.debug("OK setup GL")
     }
 
     func close() {
@@ -193,7 +193,7 @@ public class IRGLView: UIView, IRFFDecoderVideoOutput {
             self.context?.renderbufferStorage(Int(GL_RENDERBUFFER), from: eaglLayer)
             glGetRenderbufferParameteriv(GLenum(GL_RENDERBUFFER), GLenum(GL_RENDERBUFFER_WIDTH), &self.backingWidth)
             glGetRenderbufferParameteriv(GLenum(GL_RENDERBUFFER), GLenum(GL_RENDERBUFFER_HEIGHT), &self.backingHeight)
-            IRPlayerImp.Logger.libraryLoger.debug("_backingWidth: \(self.backingWidth)")
+            IRPlayerImp.Logger.libraryLogger.debug("_backingWidth: \(self.backingWidth)")
 
             if !hasLoadShaders && (self.backingWidth != 0 || self.backingHeight != 0) {
                 self.loadShaders()

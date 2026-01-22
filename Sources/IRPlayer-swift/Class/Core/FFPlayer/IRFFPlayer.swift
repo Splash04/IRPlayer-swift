@@ -92,7 +92,7 @@ class IRFFPlayer: NSObject {
     deinit {
         clean()
         audioManager?.unregisterAudioSession()
-        IRPlayerImp.Logger.libraryLoger.debug("IRFFPlayer release")
+        IRPlayerImp.Logger.libraryLogger.debug("IRFFPlayer release")
     }
 
     static func player(with abstractPlayer: IRPlayerImp) -> IRFFPlayer {

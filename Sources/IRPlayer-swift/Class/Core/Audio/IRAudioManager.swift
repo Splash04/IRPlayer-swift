@@ -473,13 +473,13 @@ class IRAudioManager: NSObject {
 
     private func delegateErrorCallback() {
         if let error = error {
-            IRPlayerImp.Logger.libraryLoger.warning("IRAudioManager did error: \(error)")
+            IRPlayerImp.Logger.libraryLogger.warning("IRAudioManager did error: \(error)")
         }
     }
 
     private func delegateWarningCallback() {
         if let warning = warning {
-            IRPlayerImp.Logger.libraryLoger.warning("IRAudioManager did warning: \(warning)")
+            IRPlayerImp.Logger.libraryLogger.warning("IRAudioManager did warning: \(warning)")
         }
     }
 

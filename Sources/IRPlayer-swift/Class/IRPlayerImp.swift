@@ -7,6 +7,7 @@
 //
 
 import UIKit
+import OSLog
 
 // video type
 @objc public enum IRVideoType: Int {
@@ -236,7 +237,7 @@ public class IRPlayerImp: NSObject {
     }
 
     deinit {
-        IRPlayerImp.Logger.libraryLoger.debug("IRPlayer release")
+        IRPlayerImp.Logger.libraryLogger.debug("IRPlayer release")
         self.cleanPlayer()
 #if IRPLATFORM_TARGET_OS_IPHONE_OR_TV
         NotificationCenter.default.removeObserver(self)
@@ -583,7 +584,7 @@ extension IRPlayerImp: IRGLViewDelegate {
     }
 
     public func glViewDidScroll(toBounds glView: IRGLView?) {
-        IRPlayerImp.Logger.libraryLoger.debug("scroll to bounds")
+        IRPlayerImp.Logger.libraryLogger.debug("scroll to bounds")
     }
 }
 
@@ -592,5 +593,5 @@ extension IRPlayerImp: IRGLViewDelegate {
 public extension IRPlayerImp { enum Logger {} }
 public extension IRPlayerImp.Logger {
     static var subsystem = Bundle.main.bundleIdentifier ?? "IRPlayerImp"
-    static var libraryLoger = Logger(subsystem: subsystem, category: "library")
+    static var libraryLogger = Logger(subsystem: subsystem, category: "library")
 }

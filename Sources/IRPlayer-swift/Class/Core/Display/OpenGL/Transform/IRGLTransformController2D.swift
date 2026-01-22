@@ -127,7 +127,7 @@ import GLKit
         scope2d.scaleY = scaleY
 
         updateVertices()
-        IRPlayerImp.Logger.libraryLoger.debug("\(scope2d.offsetX ) \(scope2d.offsetY ) \(scope2d.scaleX ) \(scope2d.scaleY )")
+        IRPlayerImp.Logger.libraryLogger.debug("\(scope2d.offsetX ) \(scope2d.offsetY ) \(scope2d.scaleX ) \(scope2d.scaleY )")
     }
 
     override func scroll(dx: Float, dy: Float) {

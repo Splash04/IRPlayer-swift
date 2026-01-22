@@ -448,7 +448,7 @@ class IRGLFragmentFish2PanoShaderGLSL {
         }
         """
 
-        IRPlayerImp.Logger.libraryLoger.debug("Shader String: \(fish2panoFragmentShaderString)")
+        IRPlayerImp.Logger.libraryLogger.debug("Shader String: \(fish2panoFragmentShaderString)")
 
         return fish2panoFragmentShaderString
     }

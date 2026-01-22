@@ -255,10 +255,10 @@ import OpenGLES
         programID = glCreateProgram()
 
         if !compileShader(&vertexShaderID, type: GLenum(GL_VERTEX_SHADER), string: vertexShaderString2) {
-            IRPlayerImp.Logger.libraryLoger.warning("load vertex shader failure")
+            IRPlayerImp.Logger.libraryLogger.warning("load vertex shader failure")
         }
         if !compileShader(&fragmentShaderID, type: GLenum(GL_FRAGMENT_SHADER), string: fragmentShaderString2) {
-            IRPlayerImp.Logger.libraryLoger.warning("load fragment shader failure")
+            IRPlayerImp.Logger.libraryLogger.warning("load fragment shader failure")
         }
         glAttachShader(programID, vertexShaderID)
         glAttachShader(programID, fragmentShaderID)
@@ -269,7 +269,7 @@ import OpenGLES
         glGetProgramiv(programID, GLenum(GL_LINK_STATUS), &status)
 
         if status == GL_FALSE {
-            IRPlayerImp.Logger.libraryLoger.warning("link program failure")
+            IRPlayerImp.Logger.libraryLogger.warning("link program failure")
         }
 
         clearShader()
@@ -335,7 +335,7 @@ import OpenGLES
             if logLength > 0 {
                 let log = UnsafeMutablePointer<GLchar>.allocate(capacity: Int(logLength))
                 glGetShaderInfoLog(shader, logLength, &logLength, log)
-                IRPlayerImp.Logger.libraryLoger.debug("Shader compile log:\n\(String(cString: log))")
+                IRPlayerImp.Logger.libraryLogger.debug("Shader compile log:\n\(String(cString: log))")
                 log.deallocate()
             }
         }
@@ -356,7 +356,7 @@ import OpenGLES
     private func checkGLError() {
         let err = glGetError()
         if err != GL_NO_ERROR {
-            IRPlayerImp.Logger.libraryLoger.warning("glError: \(String(format: "0x%04X", err))")
+            IRPlayerImp.Logger.libraryLogger.warning("glError: \(String(format: "0x%04X", err))")
         }
     }
 }
