@@ -55,6 +55,7 @@ public class IRPlayerImp: NSObject {
 
     public var decoder: IRPlayerDecoder
     public private(set) var contentURL: NSURL?
+    public private(set) var contentHeaders: [String: String]?
     private(set) var videoInput: IRFFVideoInput?
     public private(set) var videoType: IRVideoType {
         didSet {
@@ -371,6 +372,10 @@ public class IRPlayerImp: NSObject {
         case .custom:
             self.gestureControl?.currentMode = self.displayView?.getCurrentRenderMode()
         }
+    }
+    
+    public func setRequestHeaderFields(_ fields: [String: String]?) {
+        self.contentHeaders = fields
     }
 }
 

@@ -378,6 +378,7 @@ extension IRAVPlayer {
         guard let contentURL = abstractPlayer.contentURL else { return }
 
         avAsset = AVURLAsset(url: contentURL as URL)
+        avAsset?.resourceLoader.setDelegate(self, queue: DispatchQueue(label: "IRAVPlayer.AssetResourceLoaderDelegateQueue"))
         switch abstractPlayer.videoType {
         case .normal:
             setupAVPlayerItem(autoLoadedAsset: true)
@@ -413,6 +414,35 @@ extension IRAVPlayer {
         case .custom:
             break
         }
+    }
+
+}
+
+extension IRAVPlayer: AVAssetResourceLoaderDelegate {
+    
+    func resourceLoader(_ resourceLoader: AVAssetResourceLoader, shouldWaitForLoadingOfRequestedResource loadingRequest: AVAssetResourceLoadingRequest) -> Bool {
+        guard let contentHeaders = abstractPlayer.contentHeaders, !contentHeaders.isEmpty else {
+            return false
+        }
+        
+        guard let requestURL = loadingRequest.request.url {
+            return false
+        }
+        
+        guard if url.scheme == "https" else {
+            return false
+        }
+
+        var redirectRequest = URLRequest(url: requestURL)
+        
+        contentHeaders.forEach { (key: String, value: String) in
+            redirectRequest.setValue(value, forHTTPHeaderField: key)
+        }
+
+        loadingRequest.redirect = redirectRequest
+        loadingRequest.finishLoading() // This signals AVFoundation to use the redirect request
+
+        return true
     }
 
 }
