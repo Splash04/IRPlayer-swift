@@ -236,7 +236,7 @@ public class IRPlayerImp: NSObject {
     }
 
     deinit {
-        print("IRPlayer release")
+        IRPlayerImp.Logger.libraryLoger.debug("IRPlayer release")
         self.cleanPlayer()
 #if IRPLATFORM_TARGET_OS_IPHONE_OR_TV
         NotificationCenter.default.removeObserver(self)
@@ -583,6 +583,14 @@ extension IRPlayerImp: IRGLViewDelegate {
     }
 
     public func glViewDidScroll(toBounds glView: IRGLView?) {
-        print("scroll to bounds")
+        IRPlayerImp.Logger.libraryLoger.debug("scroll to bounds")
     }
+}
+
+// ******************************* MARK: - Constants
+
+public extension IRPlayerImp { enum Logger {} }
+public extension IRPlayerImp.Logger {
+    static var subsystem = Bundle.main.bundleIdentifier ?? "IRPlayerImp"
+    static var libraryLoger = Logger(subsystem: subsystem, category: "library")
 }

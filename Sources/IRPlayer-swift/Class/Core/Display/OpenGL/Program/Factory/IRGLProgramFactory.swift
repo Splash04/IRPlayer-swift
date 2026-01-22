@@ -50,7 +50,7 @@ import Foundation
         if parameter == nil {
             parameter = IRFisheyeParameter(width: 0, height: 0, up: false, rx: 0, ry: 0, cx: 0, cy: 0, latmax: 0)
         } else if !(parameter is IRFisheyeParameter) {
-            print("createIRGLProgram failed.")
+            IRPlayerImp.Logger.libraryLoger.warning("createIRGLProgram failed.")
             return nil
         }
 
@@ -114,7 +114,7 @@ import Foundation
         if parameter == nil {
             parameter = IRFisheyeParameter(width: 0, height: 0, up: false, rx: 0, ry: 0, cx: 0, cy: 0, latmax: 0)
         } else if !(parameter is IRFisheyeParameter) {
-            print("createIRGLProgram failed.")
+            IRPlayerImp.Logger.libraryLoger.warning("createIRGLProgram failed.")
             return nil
         }
 

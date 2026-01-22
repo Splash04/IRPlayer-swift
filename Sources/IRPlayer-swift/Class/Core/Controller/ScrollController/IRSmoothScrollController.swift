@@ -76,7 +76,7 @@ import UIKit
     func calculateSmoothScroll(velocity: CGPoint) {
         let magnitude = sqrt((velocity.x * velocity.x) + (velocity.y * velocity.y))
         let slideMult = magnitude / 200
-        print("magnitude: \(magnitude), slideMult: \(slideMult)")
+        IRPlayerImp.Logger.libraryLoger.debug("magnitude: \(magnitude), slideMult: \(slideMult)")
 
         self.resetSmoothScroll()
         let slideFactor = 0.05 * slideMult // Increase for more of a slide

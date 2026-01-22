@@ -67,7 +67,7 @@ enum UniformParam: Int {
             var cache: CVOpenGLESTextureCache?
             let result = CVOpenGLESTextureCacheCreate(kCFAllocatorDefault, nil, context, nil, &cache)
             if result != kCVReturnSuccess {
-                print("Error at CVOpenGLESTextureCacheCreate \(result)")
+                IRPlayerImp.Logger.libraryLoger.warning("Error at CVOpenGLESTextureCacheCreate \(result)")
                 return
             }
             videoTextureCache = cache
@@ -119,7 +119,7 @@ enum UniformParam: Int {
         }
 
         if err != kCVReturnSuccess || lumaTexture == nil {
-            print("CVOpenGLESTextureCacheCreateTextureFromImage failed (error: \(err))")
+            IRPlayerImp.Logger.libraryLoger.warning("CVOpenGLESTextureCacheCreateTextureFromImage failed (error: \(err))")
             return
         }
 
@@ -159,7 +159,7 @@ enum UniformParam: Int {
         }
 
         if err != kCVReturnSuccess {
-            print("Error at CVOpenGLESTextureCacheCreateTextureFromImage \(err)")
+            IRPlayerImp.Logger.libraryLoger.warning("Error at CVOpenGLESTextureCacheCreateTextureFromImage \(err)")
             return
         }
 

@@ -56,13 +56,13 @@ typealias IRGLProgram2DResetScaleBlock = (_ program: IRGLProgram2D) -> Bool
         switch pixelFormat {
         case .RGB_IRPixelFormat:
             self.renderer = IRGLRenderRGB()
-            print("OK use RGB GL renderer")
+            IRPlayerImp.Logger.libraryLoger.debug("OK use RGB GL renderer")
         case .YUV_IRPixelFormat:
             self.renderer = IRGLRenderYUV()
-            print("OK use YUV GL renderer")
+            IRPlayerImp.Logger.libraryLoger.debug("OK use YUV GL renderer")
         case .NV12_IRPixelFormat:
             self.renderer = IRGLRenderNV12()
-            print("OK use NV12 GL renderer")
+            IRPlayerImp.Logger.libraryLoger.debug("OK use NV12 GL renderer")
         @unknown default:
             break
         }
@@ -152,7 +152,7 @@ typealias IRGLProgram2DResetScaleBlock = (_ program: IRGLProgram2D) -> Bool
         var status: GLint = 0
         glGetProgramiv(program, GLenum(GL_LINK_STATUS), &status)
         if status == GL_FALSE {
-            print("Failed to link program \(program)")
+            IRPlayerImp.Logger.libraryLoger.debug("Failed to link program \(program)")
             return result
         }
 
@@ -165,7 +165,7 @@ typealias IRGLProgram2DResetScaleBlock = (_ program: IRGLProgram2D) -> Bool
         glDeleteShader(fragShader)
 
         if result {
-            print("OK setup GL program")
+            IRPlayerImp.Logger.libraryLoger.debug("OK setup GL program")
         } else {
             glDeleteProgram(program)
             program = 0
@@ -226,7 +226,7 @@ typealias IRGLProgram2DResetScaleBlock = (_ program: IRGLProgram2D) -> Bool
             mapProjection?.updateVertex()
             #if DEBUG
             if !IRGLProgram2D.validateProgram(program) {
-                print("Failed to validate program")
+                IRPlayerImp.Logger.libraryLoger.debug("Failed to validate program")
                 return
             }
             #endif
@@ -271,13 +271,13 @@ typealias IRGLProgram2DResetScaleBlock = (_ program: IRGLProgram2D) -> Bool
             let log = UnsafeMutablePointer<GLchar>.allocate(capacity: Int(logLength))
             defer { log.deallocate() }
             glGetProgramInfoLog(prog, logLength, &logLength, log)
-            print("Program validate log:\n\(String(cString: log))")
+            IRPlayerImp.Logger.libraryLoger.debug("Program validate log:\n\(String(cString: log))")
         }
         #endif
 
         glGetProgramiv(prog, GLenum(GL_VALIDATE_STATUS), &status)
         if status == GL_FALSE {
-            print("Failed to validate program \(prog)")
+            IRPlayerImp.Logger.libraryLoger.warning("Failed to validate program \(prog)")
             return false
         }
 
@@ -314,7 +314,7 @@ typealias IRGLProgram2DResetScaleBlock = (_ program: IRGLProgram2D) -> Bool
         glGetShaderiv(shader, GLenum(GL_COMPILE_STATUS), &status)
         if status == GL_FALSE {
             glDeleteShader(shader)
-            print("Failed to compile shader:\n")
+            IRPlayerImp.Logger.libraryLoger.debug("Failed to compile shader:\n")
             return 0
         }
 

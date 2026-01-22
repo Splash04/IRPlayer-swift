@@ -62,7 +62,7 @@ class IRGLGestureController: IRGestureController {
     @objc override func handlePan(_ gr: UIPanGestureRecognizer) {
         super.handlePan(gr)
 
-        print("didPan, state \(gr.state.rawValue)")
+        IRPlayerImp.Logger.libraryLoger.debug("didPan, state \(gr.state.rawValue)")
 
         smoothScroll?.isPaned = true
         smoothScroll?.resetSmoothScroll()
@@ -97,7 +97,7 @@ class IRGLGestureController: IRGestureController {
     @objc override func handlePinch(_ sender: UIPinchGestureRecognizer) {
         super.handlePinch(sender)
 
-        print("didPinch \(sender.scale) state \(sender.state.rawValue)")
+        IRPlayerImp.Logger.libraryLoger.debug("didPinch \(sender.scale) state \(sender.state.rawValue)")
 
         switch sender.state {
         case .cancelled, .ended, .failed:
@@ -126,7 +126,7 @@ class IRGLGestureController: IRGestureController {
     }
 
     @objc func handleRotate(_ gr: UIRotationGestureRecognizer) {
-        print("didRotate, state \(gr.state.rawValue)")
+        IRPlayerImp.Logger.libraryLoger.debug("didRotate, state \(gr.state.rawValue)")
         switch gr.state {
         case .cancelled, .ended, .failed:
             isTouchedInProgram = false
@@ -141,7 +141,7 @@ class IRGLGestureController: IRGestureController {
             guard isTouchedInProgram else { return }
 
             delegate?.glViewWillBeginDragging(targetGLView)
-            print("rotate: \(gr.rotation)")
+            IRPlayerImp.Logger.libraryLoger.debug("rotate: \(gr.rotation)")
             updateRotation(Float(gr.rotation))
             gr.rotation = 0
             delegate?.glViewDidEndDragging(nil, willDecelerate: false)
@@ -156,7 +156,7 @@ class IRGLGestureController: IRGestureController {
     @objc override func handleDoubleTap(_ gr: UITapGestureRecognizer) {
         super.handleDoubleTap(gr)
 
-        print("didDoubleTap, state \(gr.state.rawValue)")
+        IRPlayerImp.Logger.libraryLoger.debug("didDoubleTap, state \(gr.state.rawValue)")
 
         isTouchedInProgram = false
         let touchedPoint = gr.location(in: targetView)

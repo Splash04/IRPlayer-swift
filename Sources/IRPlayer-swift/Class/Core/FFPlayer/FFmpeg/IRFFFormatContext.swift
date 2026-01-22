@@ -95,7 +95,7 @@ public class IRFFFormatContext {
         if videoFormat == .rtsp {
             let ret = av_dict_set(&opts.rawPointer, "rtsp_transport", "tcp", 0)
             if ret < 0 {
-                print("Failed to set dictionary option: \(ret)")
+                IRPlayerImp.Logger.libraryLoger.debug("Failed to set dictionary option: \(ret)")
             }
         }
         result = avformat_open_input(&formatContext, contentURL.absoluteString, nil, &opts.rawPointer)
@@ -271,7 +271,7 @@ public class IRFFFormatContext {
             audioTimebase = IRFFStreamGetTimebase((formatContext?.pointee.streams[audioTrackIndex])!, defaultTimebase: 0.000025)
             audioCodecContext = codecContext
         } else {
-            print("select audio track error: \(String(describing: error))")
+            IRPlayerImp.Logger.libraryLoger.debug("select audio track error: \(String(describing: error))")
         }
         return error
     }
@@ -317,7 +317,7 @@ public class IRFFFormatContext {
 
     deinit {
         destroy()
-        print("IRFFFormatContext release")
+        IRPlayerImp.Logger.libraryLoger.debug("IRFFFormatContext release")
     }
 }
 

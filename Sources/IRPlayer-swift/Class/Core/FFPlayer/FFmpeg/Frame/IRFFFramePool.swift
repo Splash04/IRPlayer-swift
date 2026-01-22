@@ -123,6 +123,6 @@ class IRFFFramePool: NSObject, IRFFFrameDelegate {
     }
 
     deinit {
-        print("IRFFFramePool release")
+        IRPlayerImp.Logger.libraryLoger.debug("IRFFFramePool release")
     }
 }

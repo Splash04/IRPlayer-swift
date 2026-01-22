@@ -179,7 +179,7 @@ protocol IRFFDecoderDelegate: AnyObject {
                 let message = NSString(format: formatString, arguments: args) as String
                 switch level {
                 default:
-                    print(message.trimmingCharacters(in: .newlines))
+                    IRPlayerImp.Logger.libraryLoger.debug(message.trimmingCharacters(in: .newlines))
                     break;
                 }
             }
@@ -274,7 +274,7 @@ protocol IRFFDecoderDelegate: AnyObject {
         var packet = AVPacket()
         while !finished {
             if closed || error != nil {
-                print("read packet thread quit")
+                IRPlayerImp.Logger.libraryLoger.debug("read packet thread quit")
                 break
             }
             if seeking {
@@ -316,13 +316,13 @@ protocol IRFFDecoderDelegate: AnyObject {
             let max_packet_buffer_size = 20 * 1024 * 1024
             if size + packetSize >= max_packet_buffer_size {
                 let interval = paused ? 0.5 : 0.1
-                print("read thread sleep: \(interval)")
+                IRPlayerImp.Logger.libraryLoger.debug("read thread sleep: \(interval)")
                 Thread.sleep(forTimeInterval: interval)
                 continue
             }
             let result = formatContext?.readFrame(&packet)
             if (result ?? -1) < 0 {
-                print("read packet finished")
+                IRPlayerImp.Logger.libraryLoger.debug("read packet finished")
                 endOfFile = true
                 videoDecoder?.endOfFile = true
                 finished = true
@@ -330,11 +330,11 @@ protocol IRFFDecoderDelegate: AnyObject {
                 break
             }
             if packet.stream_index == (formatContext?.videoTrack?.index ?? 0) {
-                print("video: put packet")
+                IRPlayerImp.Logger.libraryLoger.debug("video: put packet")
                 videoDecoder?.putPacket(packet)
                 updateBufferedDurationByVideo()
             } else if packet.stream_index == (formatContext?.audioTrack?.index ?? 0) {
-                print("audio: put packet")
+                IRPlayerImp.Logger.libraryLoger.debug("audio: put packet")
                 if (audioDecoder?.putPacket(packet) ?? -1) < 0 {
                     error = IRFFCheckErrorCode(result!, errorCode: IRFFDecoderErrorCode.codecAudioSendPacket.rawValue)
                     delegateErrorCallback()
@@ -350,7 +350,7 @@ protocol IRFFDecoderDelegate: AnyObject {
     private func displayThread() {
         while true {
             if closed || error != nil {
-                print("display thread quit")
+                IRPlayerImp.Logger.libraryLoger.debug("display thread quit")
                 break
             }
             if seeking || buffering {
@@ -363,7 +363,7 @@ protocol IRFFDecoderDelegate: AnyObject {
                 continue
             }
             if endOfFile, videoDecoder?.empty() ?? true {
-                print("display finished")
+                IRPlayerImp.Logger.libraryLoger.debug("display finished")
                 break
             }
             if formatContext?.audioEnable == true {
@@ -379,7 +379,7 @@ protocol IRFFDecoderDelegate: AnyObject {
                         if sleepTime < 0.015 {
                             sleepTime = 0.015
                         }
-                        print("display thread sleep: \(sleepTime)")
+                        IRPlayerImp.Logger.libraryLoger.debug("display thread sleep: \(sleepTime)")
                         Thread.sleep(forTimeInterval: sleepTime)
                         continue
                     }
@@ -573,7 +573,7 @@ protocol IRFFDecoderDelegate: AnyObject {
 
     deinit {
         closeFileAsync(false)
-        print("IRFFDecoder release")
+        IRPlayerImp.Logger.libraryLoger.debug("IRFFDecoder release")
     }
 }
 

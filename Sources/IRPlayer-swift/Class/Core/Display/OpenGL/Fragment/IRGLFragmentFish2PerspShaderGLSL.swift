@@ -359,7 +359,7 @@ class IRGLFragmentFish2PerspShaderGLSL {
         }
         """
 
-        print("Shader String: \(fish2perspFragmentShaderString)")
+        IRPlayerImp.Logger.libraryLoger.debug("Shader String: \(fish2perspFragmentShaderString)")
 
         return fish2perspFragmentShaderString
     }
