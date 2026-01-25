@@ -602,7 +602,7 @@ extension IRAVPlayer {
 
 }
 
-public extension IRAVPlayer {
+extension IRAVPlayer {
 
     func selectAudioTrack(index audioTrackIndex: Int) {
         guard audioTrack?.index != audioTrackIndex,
