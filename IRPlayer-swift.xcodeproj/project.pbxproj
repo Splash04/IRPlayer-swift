@@ -19,8 +19,6 @@
 		B559AA742D15C603007A9F9F /* package.xcworkspace in Resources */ = {isa = PBXBuildFile; fileRef = B559AA5C2D15C603007A9F9F /* package.xcworkspace */; };
 		B5A024E42D0B2F1C00BE80C5 /* IRFFMpegErrorUtil.m in Sources */ = {isa = PBXBuildFile; fileRef = B5A024E32D0B2F1C00BE80C5 /* IRFFMpegErrorUtil.m */; };
 		B5A024E82D0B305700BE80C5 /* IRFFMpegErrorUtil.h in Headers */ = {isa = PBXBuildFile; fileRef = B5A024E62D0B305700BE80C5 /* IRFFMpegErrorUtil.h */; settings = {ATTRIBUTES = (Public, ); }; };
-		B5A025302D0C456E00BE80C5 /* public-umbrella.h in Headers */ = {isa = PBXBuildFile; fileRef = B5A0252B2D0C456E00BE80C5 /* public-umbrella.h */; settings = {ATTRIBUTES = (Public, ); }; };
-		B5A025312D0C456E00BE80C5 /* private-umbrella.h in Headers */ = {isa = PBXBuildFile; fileRef = B5A0252E2D0C456E00BE80C5 /* private-umbrella.h */; };
 		B5E94D662D0950DB00149265 /* libbz2.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = B5E94D602D09501300149265 /* libbz2.tbd */; };
 		B5E94D672D0950EF00149265 /* libz.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = B5E94D642D09509F00149265 /* libz.tbd */; };
 		B5E94D682D0950FD00149265 /* liblzma.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = B5E94D622D09506E00149265 /* liblzma.tbd */; };
@@ -145,10 +143,6 @@
 		B559AA692D15C603007A9F9F /* IRFFMpeg.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = IRFFMpeg.m; sourceTree = "<group>"; };
 		B5A024E32D0B2F1C00BE80C5 /* IRFFMpegErrorUtil.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = IRFFMpegErrorUtil.m; sourceTree = "<group>"; };
 		B5A024E62D0B305700BE80C5 /* IRFFMpegErrorUtil.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = IRFFMpegErrorUtil.h; sourceTree = "<group>"; };
-		B5A0252A2D0C456E00BE80C5 /* public.modulemap */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.module-map"; path = public.modulemap; sourceTree = "<group>"; };
-		B5A0252B2D0C456E00BE80C5 /* public-umbrella.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "public-umbrella.h"; sourceTree = "<group>"; };
-		B5A0252D2D0C456E00BE80C5 /* private.modulemap */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.module-map"; path = private.modulemap; sourceTree = "<group>"; };
-		B5A0252E2D0C456E00BE80C5 /* private-umbrella.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "private-umbrella.h"; sourceTree = "<group>"; };
 		B5E94D602D09501300149265 /* libbz2.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libbz2.tbd; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.0.sdk/usr/lib/libbz2.tbd; sourceTree = DEVELOPER_DIR; };
 		B5E94D612D09505500149265 /* libiconv.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libiconv.tbd; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.0.sdk/usr/lib/libiconv.tbd; sourceTree = DEVELOPER_DIR; };
 		B5E94D622D09506E00149265 /* liblzma.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = liblzma.tbd; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.0.sdk/usr/lib/liblzma.tbd; sourceTree = DEVELOPER_DIR; };
@@ -345,24 +339,6 @@
 				B5A024E62D0B305700BE80C5 /* IRFFMpegErrorUtil.h */,
 			);
 			path = include;
-			sourceTree = "<group>";
-		};
-		B5A0252C2D0C456E00BE80C5 /* include */ = {
-			isa = PBXGroup;
-			children = (
-				B5A0252A2D0C456E00BE80C5 /* public.modulemap */,
-				B5A0252B2D0C456E00BE80C5 /* public-umbrella.h */,
-			);
-			path = include;
-			sourceTree = "<group>";
-		};
-		B5A0252F2D0C456E00BE80C5 /* private_include */ = {
-			isa = PBXGroup;
-			children = (
-				B5A0252D2D0C456E00BE80C5 /* private.modulemap */,
-				B5A0252E2D0C456E00BE80C5 /* private-umbrella.h */,
-			);
-			path = private_include;
 			sourceTree = "<group>";
 		};
 		B5E94D6C2D0B21F800149265 /* Audio */ = {
@@ -707,8 +683,6 @@
 		B5E94EC62D0B21F800149265 /* IRPlayer-swift */ = {
 			isa = PBXGroup;
 			children = (
-				B5A0252C2D0C456E00BE80C5 /* include */,
-				B5A0252F2D0C456E00BE80C5 /* private_include */,
 				B5A024E52D0B2F3100BE80C5 /* Objc */,
 				B5E94E1F2D0B21F800149265 /* Class */,
 				B5E94EBF2D0B21F800149265 /* ThirdParty */,
@@ -779,12 +753,10 @@
 			isa = PBXHeadersBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				B5A025302D0C456E00BE80C5 /* public-umbrella.h in Headers */,
 				B5E94F962D0B21F800149265 /* IRPlayer_swift.h in Headers */,
 				B5E94F832D0B21F800149265 /* IRGLDefine.h in Headers */,
 				B5E94FBB2D0B21F800149265 /* IRGLMath.h in Headers */,
 				B5A024E82D0B305700BE80C5 /* IRFFMpegErrorUtil.h in Headers */,
-				B5A025312D0C456E00BE80C5 /* private-umbrella.h in Headers */,
 				B559AA732D15C603007A9F9F /* IRFFMpeg.h in Headers */,
 				B5E94FE12D0B21F800149265 /* IRFFPlayer.h in Headers */,
 			);

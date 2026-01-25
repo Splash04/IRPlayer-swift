@@ -9,13 +9,13 @@ import Foundation
 import OpenGLES
 import AVFoundation
 
-enum UniformSampler: Int {
+enum UniformSampler: Int, Hashable, Equatable, Sendable, RawRepresentable {
     case y
     case uv
     static let count = 2
 }
 
-enum UniformParam: Int {
+enum UniformParam: Int, Hashable, Equatable, Sendable, RawRepresentable {
     case colorConversionMatrix
     case lumaThreshold
     case chromaThreshold

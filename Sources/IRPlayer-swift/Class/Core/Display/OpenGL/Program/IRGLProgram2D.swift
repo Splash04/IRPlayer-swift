@@ -152,7 +152,7 @@ typealias IRGLProgram2DResetScaleBlock = (_ program: IRGLProgram2D) -> Bool
         var status: GLint = 0
         glGetProgramiv(program, GLenum(GL_LINK_STATUS), &status)
         if status == GL_FALSE {
-            IRPlayerImp.Logger.libraryLogger.debug("Failed to link program \(program)")
+            IRPlayerImp.Logger.libraryLogger.debug("Failed to link program \(self.program)")
             return result
         }
 

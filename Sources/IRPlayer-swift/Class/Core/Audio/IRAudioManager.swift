@@ -9,17 +9,17 @@ import Foundation
 import AVFoundation
 import Accelerate
 
-enum IRAudioManagerInterruptionType: UInt {
+enum IRAudioManagerInterruptionType: UInt, Hashable, Equatable, Sendable, RawRepresentable {
     case begin
     case ended
 }
 
-enum IRAudioManagerInterruptionOption: UInt {
+enum IRAudioManagerInterruptionOption: UInt, Hashable, Equatable, Sendable, RawRepresentable {
     case none
     case shouldResume
 }
 
-enum IRAudioManagerRouteChangeReason: UInt {
+enum IRAudioManagerRouteChangeReason: UInt, Hashable, Equatable, Sendable, RawRepresentable {
     case oldDeviceUnavailable
 }
 

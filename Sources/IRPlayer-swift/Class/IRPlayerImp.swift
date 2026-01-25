@@ -10,7 +10,7 @@ import UIKit
 import OSLog
 
 // video type
-@objc public enum IRVideoType: Int {
+@objc public enum IRVideoType: Int, Hashable, Equatable, Sendable, RawRepresentable {
     case normal // normal
     @objc(IRVideoTypeVR)
     case vr // virtual reality
@@ -20,7 +20,7 @@ import OSLog
 }
 
 // player state
-@objc public enum IRPlayerState: Int {
+@objc public enum IRPlayerState: Int, Hashable, Equatable, Sendable, RawRepresentable {
     case none // normal
     case buffering // virtual reality
     case readyToPlay
@@ -31,20 +31,20 @@ import OSLog
 }
 
 // display mode
-public enum IRDisplayMode {
+public enum IRDisplayMode: Int, Hashable, Equatable, Sendable, RawRepresentable {
     case normal // normal
     case box // virtual reality
 }
 
 // video content mode
-@objc public enum IRGravityMode: Int {
+@objc public enum IRGravityMode: Int, Hashable, Equatable, Sendable, RawRepresentable {
     case resize
     case resizeAspect
     case resizeAspectFill
 }
 
 // background mode
-enum IRPlayerBackgroundMode {
+enum IRPlayerBackgroundMode: Int, Hashable, Equatable, Sendable, RawRepresentable {
     case nothing
     case autoPlayAndPause
     case continuing
@@ -70,7 +70,7 @@ public class IRPlayerImp: NSObject {
     public var view: IRPLFView? {
         return self.displayView
     } // graphics view
-    var viewAnimationHidden: Bool // default is YES
+    public var viewAnimationHidden: Bool // default is YES
     public var viewGravityMode: IRGravityMode {
         didSet {
             self.displayView?.reloadGravityMode()

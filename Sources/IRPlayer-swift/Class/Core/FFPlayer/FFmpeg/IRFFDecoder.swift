@@ -179,7 +179,7 @@ protocol IRFFDecoderDelegate: AnyObject {
                 let message = NSString(format: formatString, arguments: args) as String
                 switch level {
                 default:
-                    IRPlayerImp.Logger.libraryLogger.debug(message.trimmingCharacters(in: .newlines))
+                    IRPlayerImp.Logger.libraryLogger.debug("\(message.trimmingCharacters(in: .newlines))")
                     break;
                 }
             }

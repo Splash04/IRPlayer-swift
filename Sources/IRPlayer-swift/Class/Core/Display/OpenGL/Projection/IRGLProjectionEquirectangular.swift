@@ -82,7 +82,7 @@ class IRGLProjectionEquirectangular: IRGLProjection {
         let iMax = slices + 1
         nVertices = iMax * iMax
         guard nVertices <= Int.max else {
-            IRPlayerImp.Logger.libraryLogger.warning("nSlices \(slices) too big for vertex")
+            IRPlayerImp.Logger.libraryLogger.warning("nSlices \(self.slices) too big for vertex")
             return
         }
 

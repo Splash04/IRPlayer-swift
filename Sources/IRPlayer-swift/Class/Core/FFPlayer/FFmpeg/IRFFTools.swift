@@ -7,8 +7,9 @@
 
 import Foundation
 import IRFFMpeg
+import OSLog
 
-enum IRFFDecoderErrorCode: Int {
+enum IRFFDecoderErrorCode: Int, Hashable, Equatable, Sendable, RawRepresentable {
     case formatCreate = 0
     case formatOpenInput
     case formatFindStreamInfo
@@ -25,11 +26,11 @@ enum IRFFDecoderErrorCode: Int {
 }
 
 func IRFFErrorLog(_ text: String) {
-    IRPlayerImp.Logger.libraryLogger.warning(text)
+    IRPlayerImp.Logger.libraryLogger.warning("\(text)")
 }
 
 func IRPlayerLog(_ text: String) {
-    IRPlayerImp.Logger.libraryLogger.debug(text)
+    IRPlayerImp.Logger.libraryLogger.debug("\(text)")
 }
 
 // MARK: - Utility Functions

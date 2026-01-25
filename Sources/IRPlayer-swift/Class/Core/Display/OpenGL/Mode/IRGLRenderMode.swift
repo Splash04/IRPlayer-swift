@@ -124,7 +124,7 @@ public class IRGLRenderMode: NSObject {
     }
 }
 
-enum IRGLRenderModeConfigurationKey: String {
+enum IRGLRenderModeConfigurationKey: String, Hashable, Equatable, Sendable, RawRepresentable {
     case setDefaultScale = "setDefaultScale"
     case setWideDegreeX = "setWideDegreeX"
     case setWideDegreeY = "setWideDegreeY"
