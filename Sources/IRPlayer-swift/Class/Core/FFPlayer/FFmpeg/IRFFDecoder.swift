@@ -110,6 +110,7 @@ protocol IRFFDecoderDelegate: AnyObject {
     var hardwareDecoderEnable: Bool = true
     var minBufferedDuration: TimeInterval = 0
     var reading = false
+    var isLiveStream: Bool = false
 
     var videoEnable: Bool {
         return formatContext?.videoEnable ?? false
@@ -147,6 +148,12 @@ protocol IRFFDecoderDelegate: AnyObject {
         return formatContext?.videoAspect ?? 0
     }
 
+    // Buffering timeout tracking
+    private var bufferingStartTime: TimeInterval = 0
+    private let bufferingMaxDuration: TimeInterval = 2.0 // Maximum time to wait for buffering before forcing play
+    private let bufferingMinimumThreshold: TimeInterval = 0.3 // Minimum buffered duration before playing on poor network
+    private let liveStreamBufferingMaxDuration: TimeInterval = 1.0 // Shorter timeout for live streams
+    
     var duration: TimeInterval {
         return formatContext?.duration ?? 0
     }
@@ -282,6 +289,7 @@ protocol IRFFDecoderDelegate: AnyObject {
                 playbackFinished = false
                 formatContext?.seekFile(withFFTimebase: seekToTime)
                 buffering = true
+                bufferingStartTime = Date().timeIntervalSince1970
                 audioDecoder?.flush()
                 videoDecoder?.flush()
                 videoDecoder?.paused = false
@@ -521,6 +529,7 @@ protocol IRFFDecoderDelegate: AnyObject {
         videoDecoder?.endOfFile = false
         selectAudioTrack = false
         selectAudioTrackIndex = 0
+        bufferingStartTime = 0
     }
 
     private func closeOperation() {
@@ -533,11 +542,38 @@ protocol IRFFDecoderDelegate: AnyObject {
 
     private func checkBufferingStatus() {
         if buffering {
-            if bufferedDuration >= minBufferedDuration || endOfFile {
+            let currentTime = Date().timeIntervalSince1970
+            let bufferingElapsed = currentTime - bufferingStartTime
+            
+            // For live streams, use more aggressive buffering recovery
+            let maxDuration = isLiveStream ? liveStreamBufferingMaxDuration : bufferingMaxDuration
+            let minThreshold = isLiveStream ? 0.2 : bufferingMinimumThreshold
+            
+            // For live streams with no duration, use a lower minimum buffered duration requirement
+            let effectiveMinBufferedDuration: TimeInterval = isLiveStream ? 0 : minBufferedDuration
+            
+            // Exit buffering if any of these conditions are met:
+            // 1. We have enough buffered duration
+            // 2. We've reached the end of file
+            // 3. Buffering timeout exceeded (prevents indefinite buffering on poor network)
+            // 4. For live streams: any data buffered after timeout (even minimal)
+            let shouldExitBuffering = (bufferedDuration >= effectiveMinBufferedDuration) ||
+                                      endOfFile ||
+                                      (bufferingElapsed > maxDuration && bufferedDuration >= minThreshold) ||
+                                      (isLiveStream && bufferingElapsed > maxDuration && bufferedDuration > 0.1)
+            
+            if shouldExitBuffering {
                 buffering = false
+                bufferingStartTime = 0
             }
-        } else if bufferedDuration <= 0.2 && !endOfFile {
+        } else if bufferedDuration <= 0.2 && !endOfFile && !isLiveStream {
+            // For regular streams, enter buffering when buffer gets low
             buffering = true
+            bufferingStartTime = Date().timeIntervalSince1970
+        } else if bufferedDuration <= 0.05 && !endOfFile && isLiveStream {
+            // Live streams only enter buffering if buffer is critically low
+            buffering = true
+            bufferingStartTime = Date().timeIntervalSince1970
         }
     }
 

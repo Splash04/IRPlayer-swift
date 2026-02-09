@@ -244,7 +244,21 @@ extension IRFFPlayer {
     }
 
     func reloadPlayableBufferInterval() {
-        decoder?.minBufferedDuration = abstractPlayer?.playableBufferInterval ?? 0
+        guard let decoder = decoder else { return }
+        var bufferInterval = abstractPlayer?.playableBufferInterval ?? 0
+        decoder.isLiveStream = abstractPlayer?.isLiveStream ?? false
+        
+        // For live streams (RTSP, no duration), use much lower buffer threshold
+        // to prevent stuck buffering state
+        if decoder.isLiveStream {
+            // Use minimum of requested interval or 0.2 seconds for live streams
+            bufferInterval = min(bufferInterval, 0.2)
+            if bufferInterval == 0 {
+                bufferInterval = 0.2 // Default for live streams
+            }
+        }
+        
+        decoder.minBufferedDuration = bufferInterval
     }
 
     func replaceVideo() {

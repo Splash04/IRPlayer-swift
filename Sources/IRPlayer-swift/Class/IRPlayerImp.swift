@@ -71,6 +71,7 @@ public class IRPlayerImp: NSObject {
         return self.displayView
     } // graphics view
     public var viewAnimationHidden: Bool // default is YES
+    public var isLiveStream: Bool // default is NO
     public var viewGravityMode: IRGravityMode {
         didSet {
             self.displayView?.reloadGravityMode()
@@ -224,6 +225,7 @@ public class IRPlayerImp: NSObject {
         self.viewGravityMode = .resizeAspect
         self.playableBufferInterval = 2
         self.viewAnimationHidden = true
+        self.isLiveStream = false
         self.volume = 1;
         super.init()
 #if IRPLATFORM_TARGET_OS_IPHONE_OR_TV

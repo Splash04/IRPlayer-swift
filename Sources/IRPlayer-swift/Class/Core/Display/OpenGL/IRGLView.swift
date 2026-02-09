@@ -129,7 +129,7 @@ public class IRGLView: UIView, IRFFDecoderVideoOutput {
             
             // Check if renderbuffer has valid dimensions
             if backingWidth == 0 || backingHeight == 0 {
-                IRPlayerImp.Logger.libraryLogger.warning("Renderbuffer has invalid dimensions: \(backingWidth)x\(backingHeight). Deferring GL setup.")
+                IRPlayerImp.Logger.libraryLogger.warning("Renderbuffer has invalid dimensions: \(self.backingWidth)x\(self.backingHeight). Deferring GL setup.")
                 // Clean up and return - will be retried in layoutSubviews
                 glDeleteFramebuffers(1, &framebuffer)
                 glDeleteRenderbuffers(1, &renderbuffer)
@@ -142,10 +142,10 @@ public class IRGLView: UIView, IRFFDecoderVideoOutput {
 
             let status = glCheckFramebufferStatus(GLenum(GL_FRAMEBUFFER))
             if status != GL_FRAMEBUFFER_COMPLETE {
-                IRPlayerImp.Logger.libraryLogger.warning("Failed to make complete framebuffer object \(status). Width: \(backingWidth), Height: \(backingHeight)")
+                IRPlayerImp.Logger.libraryLogger.warning("Failed to make complete framebuffer object \(status). Width: \(self.backingWidth), Height: \(self.backingHeight)")
                 
                 // Log more detailed framebuffer status
-                switch Int(status) {
+                switch Int32(status) {
                 case GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT:
                     IRPlayerImp.Logger.libraryLogger.warning("GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT")
                 case GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT:
