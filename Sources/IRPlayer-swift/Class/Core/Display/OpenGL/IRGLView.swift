@@ -117,14 +117,46 @@ public class IRGLView: UIView, IRFFDecoderVideoOutput {
             glGenRenderbuffers(1, &renderbuffer)
             glBindFramebuffer(GLenum(GL_FRAMEBUFFER), framebuffer)
             glBindRenderbuffer(GLenum(GL_RENDERBUFFER), renderbuffer)
-            context.renderbufferStorage(Int(GL_RENDERBUFFER), from: eaglLayer)
+            
+            // Allocate storage for the renderbuffer
+            if !context.renderbufferStorage(Int(GL_RENDERBUFFER), from: eaglLayer) {
+                IRPlayerImp.Logger.libraryLogger.warning("Failed to allocate renderbuffer storage")
+                return
+            }
+            
             glGetRenderbufferParameteriv(GLenum(GL_RENDERBUFFER), GLenum(GL_RENDERBUFFER_WIDTH), &backingWidth)
             glGetRenderbufferParameteriv(GLenum(GL_RENDERBUFFER), GLenum(GL_RENDERBUFFER_HEIGHT), &backingHeight)
+            
+            // Check if renderbuffer has valid dimensions
+            if backingWidth == 0 || backingHeight == 0 {
+                IRPlayerImp.Logger.libraryLogger.warning("Renderbuffer has invalid dimensions: \(backingWidth)x\(backingHeight). Deferring GL setup.")
+                // Clean up and return - will be retried in layoutSubviews
+                glDeleteFramebuffers(1, &framebuffer)
+                glDeleteRenderbuffers(1, &renderbuffer)
+                framebuffer = 0
+                renderbuffer = 0
+                return
+            }
+            
             glFramebufferRenderbuffer(GLenum(GL_FRAMEBUFFER), GLenum(GL_COLOR_ATTACHMENT0), GLenum(GL_RENDERBUFFER), renderbuffer)
 
             let status = glCheckFramebufferStatus(GLenum(GL_FRAMEBUFFER))
             if status != GL_FRAMEBUFFER_COMPLETE {
-                IRPlayerImp.Logger.libraryLogger.warning("Failed to make complete framebuffer object \(status)")
+                IRPlayerImp.Logger.libraryLogger.warning("Failed to make complete framebuffer object \(status). Width: \(backingWidth), Height: \(backingHeight)")
+                
+                // Log more detailed framebuffer status
+                switch Int(status) {
+                case GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT:
+                    IRPlayerImp.Logger.libraryLogger.warning("GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT")
+                case GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT:
+                    IRPlayerImp.Logger.libraryLogger.warning("GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT")
+                case GL_FRAMEBUFFER_INCOMPLETE_DIMENSIONS:
+                    IRPlayerImp.Logger.libraryLogger.warning("GL_FRAMEBUFFER_INCOMPLETE_DIMENSIONS")
+                case GL_FRAMEBUFFER_UNSUPPORTED:
+                    IRPlayerImp.Logger.libraryLogger.warning("GL_FRAMEBUFFER_UNSUPPORTED")
+                default:
+                    IRPlayerImp.Logger.libraryLogger.warning("Unknown framebuffer error")
+                }
                 return
             }
 
@@ -183,6 +215,16 @@ public class IRGLView: UIView, IRFFDecoderVideoOutput {
     func updateViewPort(_ viewportScale: Float) {
         CATransaction.flush()
         queue.sync {
+            // If framebuffer was not initialized (e.g., initGL was called before layer was ready), retry now
+            if self.framebuffer == 0 && self.context != nil {
+                IRPlayerImp.Logger.libraryLogger.debug("Framebuffer not initialized, retrying GL setup")
+                // Need to call initGL outside of queue.sync to avoid deadlock
+                DispatchQueue.main.async {
+                    self.initGL(with: self.irPixelFormat)
+                }
+                return
+            }
+            
             let hasLoadShaders = !(self.backingWidth == 0 && self.backingHeight == 0)
 
             EAGLContext.setCurrent(self.context)
@@ -254,6 +296,12 @@ public class IRGLView: UIView, IRFFDecoderVideoOutput {
 
     func render(_ frame: IRFFVideoFrame?) {
         guard let currentProgram = currentProgram else { return }
+        
+        // Don't render if framebuffer is not initialized
+        guard framebuffer != 0 else {
+            IRPlayerImp.Logger.libraryLogger.debug("Skipping render - framebuffer not initialized")
+            return
+        }
 
         queue.sync {
             self.setCurrentContext()
@@ -368,6 +416,7 @@ public class IRGLView: UIView, IRFFDecoderVideoOutput {
 
     func clearCanvas() {
         guard currentProgram != nil else { return }
+        guard framebuffer != 0 else { return }
 
         queue.sync {
             self.setCurrentContext()
