@@ -84,6 +84,51 @@ final class IRFFAVYUVVideoFrameTests: XCTestCase {
         XCTAssertNil(frame.image())
     }
 
+    func testSetFrameDataCopiesValidYUVPlanesAndFlushClearsBuffers() {
+        var y = Array(UInt8(1)...UInt8(16))
+        var u = Array(UInt8(21)...UInt8(24))
+        var v = Array(UInt8(31)...UInt8(34))
+        var avFrame = AVFrame()
+        avFrame.format = AV_PIX_FMT_YUV420P.rawValue
+        avFrame.linesize.0 = 4
+        avFrame.linesize.1 = 2
+        avFrame.linesize.2 = 2
+        let frame = IRFFAVYUVVideoFrame()
+
+        y.withUnsafeMutableBufferPointer { yBuffer in
+            u.withUnsafeMutableBufferPointer { uBuffer in
+                v.withUnsafeMutableBufferPointer { vBuffer in
+                    avFrame.data.0 = yBuffer.baseAddress
+                    avFrame.data.1 = uBuffer.baseAddress
+                    avFrame.data.2 = vBuffer.baseAddress
+                    withUnsafePointer(to: &avFrame) { pointer in
+                        frame.setFrameData(pointer, width: 4, height: 4)
+                    }
+                }
+            }
+        }
+
+        XCTAssertEqual(frame.type, .avyuvVideo)
+        XCTAssertEqual(frame.width, 4)
+        XCTAssertEqual(frame.height, 4)
+        XCTAssertEqual(frame.size, 24)
+        XCTAssertEqual(frame.luma?[0], 1)
+        XCTAssertEqual(frame.luma?[15], 16)
+        XCTAssertEqual(frame.chromaB?[0], 21)
+        XCTAssertEqual(frame.chromaB?[3], 24)
+        XCTAssertEqual(frame.chromaR?[0], 31)
+        XCTAssertEqual(frame.chromaR?[3], 34)
+
+        frame.flush()
+
+        XCTAssertEqual(frame.width, 0)
+        XCTAssertEqual(frame.height, 0)
+        XCTAssertEqual(frame.size, 0)
+        XCTAssertEqual(frame.luma?[0], 0)
+        XCTAssertEqual(frame.chromaB?[0], 0)
+        XCTAssertEqual(frame.chromaR?[0], 0)
+    }
+
     func testShouldAcceptFrameDataRequiresDimensionsPlanesAndLinesizes() {
         XCTAssertFalse(
             IRFFAVYUVVideoFrame.shouldAcceptFrameData(

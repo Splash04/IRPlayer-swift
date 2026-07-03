@@ -33,6 +33,7 @@ final class IRAVPlayerTests: XCTestCase {
         XCTAssertNil(IRAVPlayerTrackPolicy.mediaSelectionTrackID(from: [
             IRAVPlayer.avMediaSelectionOptionTrackIDKey: "44"
         ]))
+        XCTAssertNil(IRAVPlayerTrackPolicy.mediaSelectionTrackID(from: [:] as [String: Any]))
         XCTAssertNil(IRAVPlayerTrackPolicy.mediaSelectionTrackID(from: "not-a-dictionary"))
     }
 
