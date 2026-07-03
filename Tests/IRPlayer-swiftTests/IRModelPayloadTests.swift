@@ -188,6 +188,25 @@ final class IRModelPayloadTests: XCTestCase {
         XCTAssertEqual(IRPlayerNotificationPayload.cgFloat(Double.infinity), 0)
     }
 
+    func testPayloadPolicyCGFloatConvertsDirectNumericInputs() {
+        XCTAssertEqual(IRPlayerNotificationPayloadPolicy.cgFloat(CGFloat(1.25)), 1.25, accuracy: 0.0001)
+        XCTAssertEqual(IRPlayerNotificationPayloadPolicy.cgFloat(NSNumber(value: 2.5)), 2.5, accuracy: 0.0001)
+        XCTAssertEqual(IRPlayerNotificationPayloadPolicy.cgFloat(Double(3.75)), 3.75, accuracy: 0.0001)
+        XCTAssertEqual(IRPlayerNotificationPayloadPolicy.cgFloat(Float(4.5)), 4.5, accuracy: 0.0001)
+        XCTAssertEqual(IRPlayerNotificationPayloadPolicy.cgFloat(5), 5, accuracy: 0.0001)
+        XCTAssertEqual(IRPlayerNotificationPayloadPolicy.cgFloat("5"), 0)
+        XCTAssertEqual(IRPlayerNotificationPayloadPolicy.cgFloat(NSNumber(value: true)), 0)
+        XCTAssertEqual(IRPlayerNotificationPayloadPolicy.cgFloat(Double.infinity), 0)
+    }
+
+    func testPayloadPolicyStateAcceptsDirectIntegerRawValues() {
+        XCTAssertEqual(
+            IRPlayerNotificationPayloadPolicy.state(IRPlayerState.readyToPlay.rawValue),
+            .readyToPlay
+        )
+        XCTAssertEqual(IRPlayerNotificationPayloadPolicy.state(Int.max), .none)
+    }
+
     func testProgressPayloadDefaultsNonFiniteNumbers() {
         let payload = IRPlayerNotificationPayload.progress(
             percent: NSNumber(value: Double.nan),
