@@ -135,6 +135,38 @@ final class IRGLTransformController2DTests: XCTestCase {
         assertFinite(controller.getModelViewProjectionMatrix())
     }
 
+    func testNilRangesFallBackToZeroDegreeScrollAndUnitScale() {
+        let controller = IRGLTransformController2D(viewportWidth: 100, viewportHeight: 100)
+        let delegate = TransformDelegateSpy()
+        controller.delegate = delegate
+        controller.scaleRange = IRGLScaleRange(minScaleX: 1,
+                                               minScaleY: 1,
+                                               maxScaleX: 4,
+                                               maxScaleY: 4,
+                                               defaultScaleX: 2,
+                                               defaultScaleY: 2)
+        controller.scopeRange = IRGLScopeRange(minLat: -50,
+                                               maxLat: 50,
+                                               minLng: -50,
+                                               maxLng: 50,
+                                               defaultLat: 10,
+                                               defaultLng: 20)
+        let offsetAfterConfiguredRange = CGPoint(x: CGFloat(controller.getScope().offsetX),
+                                                 y: CGFloat(controller.getScope().offsetY))
+
+        controller.scopeRange = nil
+        XCTAssertEqual(controller.getScope().offsetX, Float(offsetAfterConfiguredRange.x), accuracy: 0.0001)
+        XCTAssertEqual(controller.getScope().offsetY, Float(offsetAfterConfiguredRange.y), accuracy: 0.0001)
+
+        controller.scaleRange = nil
+
+        XCTAssertEqual(controller.getScope().offsetX, 0, accuracy: 0.0001)
+        XCTAssertEqual(controller.getScope().offsetY, 0, accuracy: 0.0001)
+        XCTAssertEqual(controller.getScope().scaleX, 1, accuracy: 0.0001)
+        XCTAssertEqual(controller.getScope().scaleY, 1, accuracy: 0.0001)
+        assertFinite(controller.getModelViewProjectionMatrix())
+    }
+
     func testResetViewportWithoutResetTransformFallsBackWhenResizeDecisionIsInvalid() {
         let controller = IRGLTransformController2D(viewportWidth: 100, viewportHeight: 100)
         controller.update(fx: 50, fy: 50, sx: 2, sy: 2)

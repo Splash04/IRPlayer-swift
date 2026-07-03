@@ -85,6 +85,14 @@ final class IRGLTransform2DPolicyTests: XCTestCase {
 
         XCTAssertEqual(xDominant.scaleX, 2.5, accuracy: 0.0001)
         XCTAssertEqual(xDominant.scaleY, 5, accuracy: 0.0001)
+
+        let nilRangeXDominant = try XCTUnwrap(IRGLTransform2DPolicy.updateDecision(scope: scope, fx: 0, fy: 0, sx: 8, sy: 10, scaleRange: nil))
+        XCTAssertEqual(nilRangeXDominant.scaleX, 0.5, accuracy: 0.0001)
+        XCTAssertEqual(nilRangeXDominant.scaleY, 1, accuracy: 0.0001)
+
+        let nilRangeYDominant = try XCTUnwrap(IRGLTransform2DPolicy.updateDecision(scope: scope, fx: 0, fy: 0, sx: 10, sy: 8, scaleRange: nil))
+        XCTAssertEqual(nilRangeYDominant.scaleX, 1, accuracy: 0.0001)
+        XCTAssertEqual(nilRangeYDominant.scaleY, 2, accuracy: 0.0001)
     }
 
     func testScrollDecisionClampsOffsetsAndReportsStatus() throws {
