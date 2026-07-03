@@ -50,6 +50,38 @@ final class IRFFAVYUVVideoFrameTests: XCTestCase {
         return frame
     }
 
+    private func setYUV420FrameData(on frame: IRFFAVYUVVideoFrame,
+                                    width: Int,
+                                    height: Int,
+                                    format: Int32,
+                                    lumaStart: UInt8,
+                                    chromaBStart: UInt8,
+                                    chromaRStart: UInt8) {
+        let chromaWidth = width / 2
+        let chromaHeight = height / 2
+        var y = (0..<(width * height)).map { UInt8(Int(lumaStart) + $0) }
+        var u = (0..<(chromaWidth * chromaHeight)).map { UInt8(Int(chromaBStart) + $0) }
+        var v = (0..<(chromaWidth * chromaHeight)).map { UInt8(Int(chromaRStart) + $0) }
+        var avFrame = AVFrame()
+        avFrame.format = format
+        avFrame.linesize.0 = Int32(width)
+        avFrame.linesize.1 = Int32(chromaWidth)
+        avFrame.linesize.2 = Int32(chromaWidth)
+
+        y.withUnsafeMutableBufferPointer { yBuffer in
+            u.withUnsafeMutableBufferPointer { uBuffer in
+                v.withUnsafeMutableBufferPointer { vBuffer in
+                    avFrame.data.0 = yBuffer.baseAddress
+                    avFrame.data.1 = uBuffer.baseAddress
+                    avFrame.data.2 = vBuffer.baseAddress
+                    withUnsafePointer(to: &avFrame) { pointer in
+                        frame.setFrameData(pointer, width: width, height: height)
+                    }
+                }
+            }
+        }
+    }
+
     func testImageReturnsNilWhenFrameDataIsMissing() {
         let frame = IRFFAVYUVVideoFrame()
 
@@ -135,6 +167,28 @@ final class IRFFAVYUVVideoFrameTests: XCTestCase {
         XCTAssertEqual(frame.chromaR?[0], 0)
     }
 
+    func testSetFrameDataReallocatesPlaneBuffersWhenCapacityGrows() {
+        let frame = makeValidAVYUVVideoFrame()
+
+        setYUV420FrameData(on: frame,
+                           width: 8,
+                           height: 4,
+                           format: AV_PIX_FMT_YUV420P.rawValue,
+                           lumaStart: 101,
+                           chromaBStart: 41,
+                           chromaRStart: 61)
+
+        XCTAssertEqual(frame.width, 8)
+        XCTAssertEqual(frame.height, 4)
+        XCTAssertEqual(frame.size, 48)
+        XCTAssertEqual(frame.luma?[0], 101)
+        XCTAssertEqual(frame.luma?[31], 132)
+        XCTAssertEqual(frame.chromaB?[0], 41)
+        XCTAssertEqual(frame.chromaB?[7], 48)
+        XCTAssertEqual(frame.chromaR?[0], 61)
+        XCTAssertEqual(frame.chromaR?[7], 68)
+    }
+
     func testImageCachesConvertedYUVImageUntilFrameChanges() throws {
         let frame = makeValidAVYUVVideoFrame()
 
@@ -146,6 +200,18 @@ final class IRFFAVYUVVideoFrameTests: XCTestCase {
         XCTAssertEqual(firstImage.size.height, 4)
 
         frame.flush()
+
+        XCTAssertNil(frame.image())
+    }
+
+    func testImageReturnsNilWhenRequiredPlaneBufferIsMissingAfterValidFrameData() {
+        let frame = makeValidAVYUVVideoFrame()
+        let lumaIndex = IRYUVChannel.luma.rawValue
+        let originalLuma = frame.channelPixels[lumaIndex]
+        frame.channelPixels[lumaIndex] = nil
+        defer {
+            frame.channelPixels[lumaIndex] = originalLuma
+        }
 
         XCTAssertNil(frame.image())
     }
