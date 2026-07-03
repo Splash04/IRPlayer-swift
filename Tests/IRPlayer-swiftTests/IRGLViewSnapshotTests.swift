@@ -20,6 +20,87 @@ final class IRGLViewSnapshotTests: XCTestCase {
         XCTAssertEqual(image.size, .zero)
     }
 
+    func testPlayerInitializerStoresAbstractPlayerAndBuildsDefaultModes() {
+        let player = IRPlayerImp.player()
+        player.manager = nil
+
+        let view = IRGLView(frame: CGRect(x: 0, y: 0, width: 12, height: 8), player: player)
+
+        XCTAssertTrue(view.abstractPlayer === player)
+        XCTAssertFalse(view.getRenderModes().isEmpty)
+        XCTAssertNotNil(view.getCurrentRenderMode())
+        withExtendedLifetime(player) {}
+    }
+
+    func testLayoutAndQueueHelpersRemainCallable() {
+        let view = IRGLView(frame: CGRect(x: 0, y: 0, width: 12, height: 8))
+        var didRunInQueue = false
+
+        view.layoutSubviews()
+        view.runSyncInQueue {
+            didRunInQueue = true
+        }
+        view.clearCanvas()
+        let snapshotView = IRGLView(frame: .zero)
+        snapshotView.doSnapShot()
+
+        XCTAssertTrue(didRunInQueue)
+        XCTAssertTrue(snapshotView.willDoSnapshot)
+        snapshotView.willDoSnapshot = false
+    }
+
+    func testCreateImageFromFramebufferReturnsImageForNonZeroView() {
+        let view = IRGLView(frame: CGRect(x: 0, y: 0, width: 12, height: 8))
+
+        let image = view.createImageFromFramebuffer()
+
+        XCTAssertEqual(image.size.width, 12, accuracy: 0.0001)
+        XCTAssertEqual(image.size.height, 8, accuracy: 0.0001)
+    }
+
+    func testSendVideoFrameStoresCurrentFrameDimensions() {
+        let view = IRGLView(frame: .zero)
+        let frame = IRFFVideoFrame()
+        frame.width = 123
+        frame.height = 45
+
+        view.send(videoFrame: frame)
+
+        XCTAssertEqual(view.lastFrameWidth, 123)
+        XCTAssertEqual(view.lastFrameHeight, 45)
+    }
+
+    func testRendererCleanupBranchesRemainCallable() {
+        let view = IRGLView(frame: .zero)
+
+        view.rendererType = .empty
+        view.cleanViewIgnore()
+        view.rendererType = .AVPlayerLayer
+        view.cleanViewIgnore()
+        view.rendererType = .AVPlayerPixelBufferVR
+        view.cleanViewIgnore()
+        view.rendererType = .FFmpegPixelBuffer
+        view.cleanViewIgnore()
+        view.rendererType = .FFmpegPixelBufferVR
+        view.cleanViewIgnore()
+
+        XCTAssertEqual(view.rendererType, .FFmpegPixelBufferVR)
+    }
+
+    func testDegreeScrollDelegatesThroughCurrentProgram() {
+        let view = IRGLView(frame: .zero)
+        let mode = IRGLRenderMode2D()
+        let transformController = ViewRecordingTransformController()
+
+        view.setRenderModes([mode])
+        _ = view.choose(renderMode: mode, withImmediatelyRenderOnce: false)
+        mode.program?.tramsformController = transformController
+
+        view.scroll(byDegreeX: 3, degreeY: -4)
+
+        XCTAssertEqual(transformController.degreeScrolls.map { "\($0.x),\($0.y)" }, ["3.0,-4.0"])
+    }
+
     func testRenderModeSelectionRequiresRegisteredMode() {
         let view = IRGLView(frame: .zero)
         let firstMode = IRGLRenderMode2D()
@@ -258,5 +339,13 @@ final class IRGLViewSnapshotTests: XCTestCase {
                                           targetRect: CGRect(x: 0, y: 0, width: CGFloat.nan, height: 100),
                                           contentMode: .scaleAspectFit)
         )
+    }
+}
+
+private final class ViewRecordingTransformController: IRGLTransformController {
+    private(set) var degreeScrolls: [(x: Float, y: Float)] = []
+
+    override func scroll(degreeX: Float, degreeY: Float) {
+        degreeScrolls.append((degreeX, degreeY))
     }
 }
