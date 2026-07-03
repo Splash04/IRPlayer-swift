@@ -101,6 +101,84 @@ final class IRGLViewSnapshotTests: XCTestCase {
         XCTAssertEqual(transformController.degreeScrolls.map { "\($0.x),\($0.y)" }, ["3.0,-4.0"])
     }
 
+    func testReloadGravityModeMapsPlayerGravityToCurrentProgramContentMode() throws {
+        let player = IRPlayerImp.player()
+        player.manager = nil
+        let view = IRGLView(frame: .zero, player: player)
+        let mode = IRGLRenderMode2D()
+
+        view.setRenderModes([mode])
+        XCTAssertTrue(view.choose(renderMode: mode, withImmediatelyRenderOnce: false))
+        _ = try XCTUnwrap(mode.program)
+
+        let cases: [(IRGravityMode, IRGLRenderContentMode)] = [
+            (.resizeAspect, .scaleAspectFit),
+            (.resizeAspectFill, .scaleAspectFill),
+            (.resize, .scaleToFill)
+        ]
+
+        for (gravity, expectedContentMode) in cases {
+            player.viewGravityMode = gravity
+            view.reloadGravityMode()
+
+            XCTAssertEqual(mode.program?.contentMode, expectedContentMode)
+        }
+
+        withExtendedLifetime(player) {}
+    }
+
+    func testUpdateScopeUsesPanoControllerCenterAndScaledScope() throws {
+        let view = IRGLView(frame: .zero)
+        let mode = IRGLRenderMode2DFisheye2Pano()
+
+        view.setRenderModes([mode])
+        XCTAssertTrue(view.choose(renderMode: mode, withImmediatelyRenderOnce: false))
+        let program = try XCTUnwrap(mode.program as? IRGLProgram2DFisheye2Pano)
+        let transformController = ViewRecordingTransformController(
+            scope: IRGLScope2D(scaleX: 2,
+                               scaleY: 3,
+                               offsetX: 0,
+                               offsetY: 0,
+                               panDegree: 0,
+                               w: 80,
+                               h: 40)
+        )
+        program.tramsformController = transformController
+
+        view.updateScope(byFx: 10, fy: 20, dsx: 1.5, dsy: 0.5)
+
+        XCTAssertEqual(transformController.updates.map { "\($0.fx),\($0.fy),\($0.sx),\($0.sy)" }, ["40.0,20.0,3.0,1.5"])
+    }
+
+    func testScrollByDxWrapsPanoOffsetWithinOutputWidth() throws {
+        let view = IRGLView(frame: .zero)
+        let mode = IRGLRenderMode2DFisheye2Pano()
+
+        view.setRenderModes([mode])
+        XCTAssertTrue(view.choose(renderMode: mode, withImmediatelyRenderOnce: false))
+        let program = try XCTUnwrap(mode.program as? IRGLProgram2DFisheye2Pano)
+        let params = try XCTUnwrap(program.metalFish2PanoParams)
+        let transformController = ViewRecordingTransformController(
+            scope: IRGLScope2D(scaleX: 2,
+                               scaleY: 1,
+                               offsetX: 0,
+                               offsetY: 0,
+                               panDegree: 0,
+                               w: 50,
+                               h: 40)
+        )
+        params.outputWidth = 100
+        params.offsetX = 0
+        program.tramsformController = transformController
+
+        view.scroll(byDx: 500, dy: 0)
+        XCTAssertEqual(params.offsetX, -100, accuracy: 0.0001)
+
+        view.scroll(byDx: -500, dy: 0)
+        XCTAssertEqual(params.offsetX, 100, accuracy: 0.0001)
+        XCTAssertEqual(transformController.linearScrolls.map { "\($0.dx),\($0.dy)" }, ["500.0,0.0", "-500.0,0.0"])
+    }
+
     func testRenderModeSelectionRequiresRegisteredMode() {
         let view = IRGLView(frame: .zero)
         let firstMode = IRGLRenderMode2D()
@@ -343,9 +421,29 @@ final class IRGLViewSnapshotTests: XCTestCase {
 }
 
 private final class ViewRecordingTransformController: IRGLTransformController {
+    private let scope: IRGLScope2D
     private(set) var degreeScrolls: [(x: Float, y: Float)] = []
+    private(set) var linearScrolls: [(dx: Float, dy: Float)] = []
+    private(set) var updates: [(fx: Float, fy: Float, sx: Float, sy: Float)] = []
+
+    init(scope: IRGLScope2D = IRGLScope2D()) {
+        self.scope = scope
+        super.init()
+    }
+
+    override func getScope() -> IRGLScope2D {
+        scope
+    }
 
     override func scroll(degreeX: Float, degreeY: Float) {
         degreeScrolls.append((degreeX, degreeY))
+    }
+
+    override func scroll(dx: Float, dy: Float) {
+        linearScrolls.append((dx, dy))
+    }
+
+    override func update(fx: Float, fy: Float, sx: Float, sy: Float) {
+        updates.append((fx, fy, sx, sy))
     }
 }

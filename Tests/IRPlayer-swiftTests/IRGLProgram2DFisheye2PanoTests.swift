@@ -246,6 +246,21 @@ final class IRGLProgram2DFisheye2PanoTests: XCTestCase {
         XCTAssertNil(params.consumePixUVIfReady())
     }
 
+    func testPanoShaderParamsPublishesOnlyLatestPixelMapGeneration() throws {
+        let params = IRGLFish2PanoShaderParams()
+        params.antialias = 2
+
+        params.updateTextureWidth(256, height: 192)
+        params.updateTextureWidth(32, height: 24)
+        let pixUV = try waitForPixUV(from: params)
+
+        XCTAssertEqual(pixUV.count, 4)
+        XCTAssertEqual(params.textureWidth, 32)
+        XCTAssertEqual(params.textureHeight, 24)
+        params.releaseConsumedPixUV(pixUV)
+        XCTAssertNil(params.consumePixUVIfReady())
+    }
+
     func testPanoShaderParamsReleaseConsumedPixUVIsIdempotent() throws {
         let params = IRGLFish2PanoShaderParams()
 
