@@ -323,6 +323,73 @@ final class IRAVPlayerTests: XCTestCase {
         XCTAssertEqual(errorInfo.error.code, -1)
     }
 
+    func testPlaybackErrorInfoPrefersPlayerItemErrorAndCopiesLogPayloads() throws {
+        let itemError = NSError(domain: "item", code: 11)
+        let playerError = NSError(domain: "player", code: 22)
+        let date = Date(timeIntervalSince1970: 77)
+        let logData = Data("log".utf8)
+
+        let errorInfo = IRAVPlayerErrorPolicy.errorInfo(
+            playerItemError: itemError,
+            playerError: playerError,
+            extendedLogData: logData,
+            extendedLogDataStringEncoding: String.Encoding.utf16.rawValue,
+            errorEvents: [
+                IRAVPlayerErrorPolicy.ErrorLogEventSnapshot(
+                    date: date,
+                    URI: "https://example.com/error.ts",
+                    serverAddress: "203.0.113.8",
+                    playbackSessionID: "session-77",
+                    errorStatusCode: 404,
+                    errorDomain: "cdn",
+                    errorComment: "missing"
+                )
+            ]
+        )
+
+        XCTAssertEqual(errorInfo.error.domain, "item")
+        XCTAssertEqual(errorInfo.error.code, 11)
+        XCTAssertEqual(errorInfo.extendedLogData, logData)
+        XCTAssertEqual(errorInfo.extendedLogDataStringEncoding, String.Encoding.utf16.rawValue)
+
+        XCTAssertEqual(errorInfo.errorEvents?.count, 1)
+        let event = try XCTUnwrap(errorInfo.errorEvents?.first)
+        XCTAssertEqual(event.date, date)
+        XCTAssertEqual(event.URI, "https://example.com/error.ts")
+        XCTAssertEqual(event.serverAddress, "203.0.113.8")
+        XCTAssertEqual(event.playbackSessionID, "session-77")
+        XCTAssertEqual(event.errorStatusCode, 404)
+        XCTAssertEqual(event.errorDomain, "cdn")
+        XCTAssertEqual(event.errorComment, "missing")
+    }
+
+    func testPlaybackErrorInfoUsesPlayerErrorWhenItemErrorIsMissing() {
+        let playerError = NSError(domain: "player", code: 22)
+
+        let errorInfo = IRAVPlayerErrorPolicy.errorInfo(
+            playerItemError: nil,
+            playerError: playerError,
+            extendedLogData: Data("ignored".utf8),
+            extendedLogDataStringEncoding: String.Encoding.utf16.rawValue,
+            errorEvents: [
+                IRAVPlayerErrorPolicy.ErrorLogEventSnapshot(
+                    date: Date(timeIntervalSince1970: 1),
+                    URI: "ignored",
+                    serverAddress: "ignored",
+                    playbackSessionID: "ignored",
+                    errorStatusCode: 500,
+                    errorDomain: "ignored",
+                    errorComment: "ignored"
+                )
+            ]
+        )
+
+        XCTAssertEqual(errorInfo.error.domain, "player")
+        XCTAssertEqual(errorInfo.error.code, 22)
+        XCTAssertNil(errorInfo.extendedLogData)
+        XCTAssertNil(errorInfo.errorEvents)
+    }
+
     func testPlaybackErrorEventBuilderCopiesSnapshotFields() {
         let date = Date(timeIntervalSince1970: 42)
 
