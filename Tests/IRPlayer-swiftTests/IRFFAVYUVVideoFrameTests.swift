@@ -23,6 +23,33 @@ final class IRFFAVYUVVideoFrameTests: XCTestCase {
         return pixelBuffer
     }
 
+    private func makeValidAVYUVVideoFrame() -> IRFFAVYUVVideoFrame {
+        var y = Array(UInt8(1)...UInt8(16))
+        var u = Array(UInt8(21)...UInt8(24))
+        var v = Array(UInt8(31)...UInt8(34))
+        var avFrame = AVFrame()
+        avFrame.format = AV_PIX_FMT_YUV420P.rawValue
+        avFrame.linesize.0 = 4
+        avFrame.linesize.1 = 2
+        avFrame.linesize.2 = 2
+        let frame = IRFFAVYUVVideoFrame()
+
+        y.withUnsafeMutableBufferPointer { yBuffer in
+            u.withUnsafeMutableBufferPointer { uBuffer in
+                v.withUnsafeMutableBufferPointer { vBuffer in
+                    avFrame.data.0 = yBuffer.baseAddress
+                    avFrame.data.1 = uBuffer.baseAddress
+                    avFrame.data.2 = vBuffer.baseAddress
+                    withUnsafePointer(to: &avFrame) { pointer in
+                        frame.setFrameData(pointer, width: 4, height: 4)
+                    }
+                }
+            }
+        }
+
+        return frame
+    }
+
     func testImageReturnsNilWhenFrameDataIsMissing() {
         let frame = IRFFAVYUVVideoFrame()
 
@@ -85,28 +112,7 @@ final class IRFFAVYUVVideoFrameTests: XCTestCase {
     }
 
     func testSetFrameDataCopiesValidYUVPlanesAndFlushClearsBuffers() {
-        var y = Array(UInt8(1)...UInt8(16))
-        var u = Array(UInt8(21)...UInt8(24))
-        var v = Array(UInt8(31)...UInt8(34))
-        var avFrame = AVFrame()
-        avFrame.format = AV_PIX_FMT_YUV420P.rawValue
-        avFrame.linesize.0 = 4
-        avFrame.linesize.1 = 2
-        avFrame.linesize.2 = 2
-        let frame = IRFFAVYUVVideoFrame()
-
-        y.withUnsafeMutableBufferPointer { yBuffer in
-            u.withUnsafeMutableBufferPointer { uBuffer in
-                v.withUnsafeMutableBufferPointer { vBuffer in
-                    avFrame.data.0 = yBuffer.baseAddress
-                    avFrame.data.1 = uBuffer.baseAddress
-                    avFrame.data.2 = vBuffer.baseAddress
-                    withUnsafePointer(to: &avFrame) { pointer in
-                        frame.setFrameData(pointer, width: 4, height: 4)
-                    }
-                }
-            }
-        }
+        let frame = makeValidAVYUVVideoFrame()
 
         XCTAssertEqual(frame.type, .avyuvVideo)
         XCTAssertEqual(frame.width, 4)
@@ -127,6 +133,33 @@ final class IRFFAVYUVVideoFrameTests: XCTestCase {
         XCTAssertEqual(frame.luma?[0], 0)
         XCTAssertEqual(frame.chromaB?[0], 0)
         XCTAssertEqual(frame.chromaR?[0], 0)
+    }
+
+    func testImageCachesConvertedYUVImageUntilFrameChanges() throws {
+        let frame = makeValidAVYUVVideoFrame()
+
+        let firstImage = try XCTUnwrap(frame.image())
+        let secondImage = try XCTUnwrap(frame.image())
+
+        XCTAssertTrue(firstImage === secondImage)
+        XCTAssertEqual(firstImage.size.width, 4)
+        XCTAssertEqual(firstImage.size.height, 4)
+
+        frame.flush()
+
+        XCTAssertNil(frame.image())
+    }
+
+    func testStopPlayingClearsPlayingStateAndNotifiesDelegate() {
+        let frame = makeValidAVYUVVideoFrame()
+        let delegate = AVYUVFrameDelegateSpy()
+        frame.delegate = delegate
+
+        frame.startPlaying()
+        frame.stopPlaying()
+
+        XCTAssertFalse(frame.playing)
+        XCTAssertTrue(delegate.stoppedFrame === frame)
     }
 
     func testShouldAcceptFrameDataRequiresDimensionsPlanesAndLinesizes() {
@@ -487,4 +520,16 @@ final class IRFFAVYUVVideoFrameTests: XCTestCase {
         XCTAssertEqual(dimensions?.width, 640)
         XCTAssertEqual(dimensions?.height, 480)
     }
+}
+
+private final class AVYUVFrameDelegateSpy: IRFFFrameDelegate {
+    private(set) var stoppedFrame: IRFFFrame?
+
+    func frameDidStartPlaying(_ frame: IRFFFrame) {}
+
+    func frameDidStopPlaying(_ frame: IRFFFrame) {
+        stoppedFrame = frame
+    }
+
+    func frameDidCancel(_ frame: IRFFFrame) {}
 }

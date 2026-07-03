@@ -126,7 +126,10 @@ import IRFFMpeg
             return cachedImage
         }
         guard width > 0, height > 0, let pixelFormat else { return nil }
-        guard let image = IRYUVConvertToImage(srcData: channelPixels, srcLinesize: channelLinesize, width: width, height: height, pixelFormat: pixelFormat) else { return nil }
+        let sourcePlanes: [UnsafePointer<UInt8>?] = channelPixels.map { pointer in
+            pointer.map { UnsafePointer($0) }
+        }
+        guard let image = IRYUVConvertToImage(srcData: sourcePlanes, srcLinesize: channelLinesize, width: width, height: height, pixelFormat: pixelFormat) else { return nil }
         cachedImage = image
         isImageDirty = false
         return image
