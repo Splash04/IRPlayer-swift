@@ -136,6 +136,24 @@ final class IRGLGestureControllerTests: XCTestCase {
         XCTAssertFalse(gestureController.isProgramZooming())
     }
 
+    func testProgramZoomingReturnsTrueWhenProgramScaleDiffersFromDefault() {
+        let gestureController = IRGLGestureController()
+        let mode = IRGLRenderMode2D()
+        let program = IRGLProgram2D()
+
+        program.tramsformController = RecordingTransformController(scope: IRGLScope2D(scaleX: 2,
+                                                                                      scaleY: 1,
+                                                                                      offsetX: 0,
+                                                                                      offsetY: 0,
+                                                                                      panDegree: 0,
+                                                                                      w: 200,
+                                                                                      h: 100))
+        mode.program = program
+        gestureController.currentMode = mode
+
+        XCTAssertTrue(gestureController.isProgramZooming())
+    }
+
     func testProgramCreationAssignsSmoothScrollAsProgramDelegate() {
         let view = IRGLView(frame: CGRect(x: 0, y: 0, width: 100, height: 100))
         let smoothScroll = IRSmoothScrollController(targetView: view)
@@ -395,6 +413,30 @@ final class IRGLGestureControllerTests: XCTestCase {
         gestureController.handleDoubleTap(UITapGestureRecognizer())
 
         XCTAssertNotNil(program.doResetToDefaultScaleBlock)
+    }
+
+    func testDoubleTapInsideProgramResetsZoomed2DTransformScale() {
+        let gestureController = IRGLGestureController()
+        let mode = IRGLRenderMode2D()
+        let program = IRGLProgram2D(
+            pixelFormat: .RGB_IRPixelFormat,
+            viewportRange: CGRect(x: -1, y: -1, width: 2, height: 2),
+            parameter: nil
+        )
+        let transformController = IRGLTransformController2D(viewportWidth: 2, viewportHeight: 2)
+
+        transformController.update(fx: 1, fy: 1, sx: 2, sy: 2)
+        program.tramsformController = transformController
+        mode.program = program
+        gestureController.currentMode = mode
+
+        XCTAssertEqual(program.getCurrentScale().x, 2, accuracy: 0.0001)
+        XCTAssertEqual(program.getCurrentScale().y, 2, accuracy: 0.0001)
+
+        gestureController.handleDoubleTap(UITapGestureRecognizer())
+
+        XCTAssertEqual(program.getCurrentScale().x, 1, accuracy: 0.0001)
+        XCTAssertEqual(program.getCurrentScale().y, 1, accuracy: 0.0001)
     }
 
     func testDoubleTapInsideProgramClearsResetBlockForNon2DTransform() {
