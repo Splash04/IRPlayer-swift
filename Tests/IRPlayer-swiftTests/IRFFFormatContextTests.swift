@@ -220,6 +220,38 @@ final class IRFFFormatContextTests: XCTestCase {
         XCTAssertLessThan(context.readFrame(&packet), 0)
     }
 
+    func testDerivedFormatValuesUseDefaultsBeforeStreamIsOpened() {
+        let context = IRFFFormatContext(contentURL: URL(fileURLWithPath: "/tmp/missing.mp4"), videoFormat: .mpeg4)
+
+        XCTAssertEqual(context.bitrate, 0)
+        XCTAssertEqual(context.duration, 0)
+    }
+
+    func testContentURLStringUsesFilePathOrAbsoluteURL() {
+        let fileContext = IRFFFormatContext(
+            contentURL: URL(fileURLWithPath: "/tmp/sample movie.mp4"),
+            videoFormat: .mpeg4
+        )
+        let remoteContext = IRFFFormatContext(
+            contentURL: URL(string: "https://example.com/video.m3u8?token=abc")!,
+            videoFormat: .mpeg4
+        )
+
+        XCTAssertEqual(fileContext.contentURLString, "/tmp/sample movie.mp4")
+        XCTAssertEqual(remoteContext.contentURLString, "https://example.com/video.m3u8?token=abc")
+    }
+
+    func testSelectingMissingAudioTrackLeavesContextUnchanged() {
+        let context = IRFFFormatContext(contentURL: URL(fileURLWithPath: "/tmp/missing.mp4"), videoFormat: .mpeg4)
+
+        let result = context.selectAudioTrackIndexResult(0)
+
+        XCTAssertNil(result.error)
+        XCTAssertFalse(result.didChangeTrack)
+        XCTAssertFalse(context.containAudioTrack(0))
+        XCTAssertNil(context.selectAudioTrackIndex(0))
+    }
+
     func testDurationSecondsPreservesNoPTSBehavior() {
         XCTAssertEqual(IRFFFormatContext.durationSeconds(from: Int64.min), TimeInterval(MAXFLOAT))
     }
