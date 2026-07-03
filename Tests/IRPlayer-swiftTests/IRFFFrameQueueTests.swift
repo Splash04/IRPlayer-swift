@@ -93,6 +93,38 @@ final class IRFFFrameQueueTests: XCTestCase {
         XCTAssertEqual(queue.size, 0)
     }
 
+    func testFrameQueueSyncFetchWaitsUntilDestroyedWhenEmpty() {
+        let queue = IRFFFrameQueue.frameQueue()
+        let fetchStarted = expectation(description: "sync fetch started")
+        let fetchFinished = expectation(description: "sync fetch finished")
+        let resultLock = NSLock()
+        var didFinish = false
+        var fetchedFrame: IRFFFrame?
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            fetchStarted.fulfill()
+            let frame = queue.getFrameSync()
+            resultLock.lock()
+            fetchedFrame = frame
+            didFinish = true
+            resultLock.unlock()
+            fetchFinished.fulfill()
+        }
+
+        wait(for: [fetchStarted], timeout: 1)
+        Thread.sleep(forTimeInterval: 0.02)
+        resultLock.lock()
+        XCTAssertFalse(didFinish)
+        resultLock.unlock()
+
+        queue.destroy()
+
+        wait(for: [fetchFinished], timeout: 1)
+        resultLock.lock()
+        XCTAssertNil(fetchedFrame)
+        resultLock.unlock()
+    }
+
     func testPutSortFrameReturnsFramesInAscendingPositionOrder() {
         let queue = IRFFFrameQueue.frameQueue()
         let later = makeFrame(position: 3, duration: 0.1, size: 1)
