@@ -17,8 +17,8 @@ final class IRFFDictionaryPolicyTests: XCTestCase {
         }
     }
 
-    func testCStringDecodingReturnsValidUTF8Strings() throws {
-        try "Camera 1".withCString { value in
+    func testCStringDecodingReturnsValidUTF8Strings() {
+        "Camera 1".withCString { value in
             XCTAssertEqual(IRFFDictionaryPolicy.string(fromCString: value), "Camera 1")
         }
     }

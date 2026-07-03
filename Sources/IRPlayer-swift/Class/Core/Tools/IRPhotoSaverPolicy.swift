@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import Photos
 
 enum IRPhotoSaverPolicy {
     #if IRPhotoSaverDiagnosticOutputEnable
@@ -22,5 +23,9 @@ enum IRPhotoSaverPolicy {
 
     static func diagnosticMessage(for _: IRPhotoSaver.Failure) -> String? {
         nil
+    }
+
+    static func photoLibraryAccessIsGranted(_ status: PHAuthorizationStatus) -> Bool {
+        status == .authorized || status == .limited
     }
 }

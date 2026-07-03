@@ -110,6 +110,29 @@ final class IRAudioManagerRenderTests: XCTestCase {
         XCTAssertEqual(manager.renderFrames(16, ioData: nil), noErr)
     }
 
+    func testRenderFramesClearsOutputBuffersWhenIdle() throws {
+        let manager = IRAudioManager()
+        var samples: [Float] = [1, -0.5, 0.25, 2]
+
+        try samples.withUnsafeMutableBufferPointer { buffer in
+            let baseAddress = try XCTUnwrap(buffer.baseAddress)
+            let audioBuffer = AudioBuffer(
+                mNumberChannels: 2,
+                mDataByteSize: UInt32(buffer.count * MemoryLayout<Float>.stride),
+                mData: UnsafeMutableRawPointer(baseAddress)
+            )
+            var bufferList = AudioBufferList(mNumberBuffers: 1, mBuffers: audioBuffer)
+
+            let status = withUnsafeMutablePointer(to: &bufferList) { pointer in
+                manager.renderFrames(2, ioData: pointer)
+            }
+
+            XCTAssertEqual(status, noErr)
+        }
+
+        XCTAssertEqual(samples, [0, 0, 0, 0])
+    }
+
     func testRenderSampleCountRejectsInvalidOrOverflowingInputs() {
         XCTAssertNil(IRAudioManager.renderSampleCount(numberOfFrames: 0, numberOfChannels: 2))
         XCTAssertNil(IRAudioManager.renderSampleCount(numberOfFrames: 10, numberOfChannels: 0))

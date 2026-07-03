@@ -6,6 +6,7 @@
 //
 
 import XCTest
+import Photos
 @testable import IRPlayer_swift
 
 final class IRPhotoSaverTests: XCTestCase {
@@ -38,5 +39,24 @@ final class IRPhotoSaverTests: XCTestCase {
         }
 
         XCTAssertEqual(wrapperOutput, policyOutput)
+    }
+
+    func testPhotoLibraryAccessIsGrantedForAuthorizedAndLimitedStatusesOnly() {
+        XCTAssertTrue(IRPhotoSaverPolicy.photoLibraryAccessIsGranted(.authorized))
+        XCTAssertTrue(IRPhotoSaverPolicy.photoLibraryAccessIsGranted(.limited))
+        XCTAssertFalse(IRPhotoSaverPolicy.photoLibraryAccessIsGranted(.denied))
+        XCTAssertFalse(IRPhotoSaverPolicy.photoLibraryAccessIsGranted(.restricted))
+        XCTAssertFalse(IRPhotoSaverPolicy.photoLibraryAccessIsGranted(.notDetermined))
+    }
+
+    func testPhotoLibraryAccessWrapperMatchesPolicy() {
+        XCTAssertEqual(
+            IRPhotoSaver.photoLibraryAccessIsGranted(.authorized),
+            IRPhotoSaverPolicy.photoLibraryAccessIsGranted(.authorized)
+        )
+        XCTAssertEqual(
+            IRPhotoSaver.photoLibraryAccessIsGranted(.denied),
+            IRPhotoSaverPolicy.photoLibraryAccessIsGranted(.denied)
+        )
     }
 }

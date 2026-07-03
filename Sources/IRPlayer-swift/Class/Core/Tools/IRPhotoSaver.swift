@@ -59,9 +59,13 @@ enum IRPhotoSaver {
         IRPhotoSaverPolicy.diagnosticMessage(for: failure)
     }
 
+    static func photoLibraryAccessIsGranted(_ status: PHAuthorizationStatus) -> Bool {
+        IRPhotoSaverPolicy.photoLibraryAccessIsGranted(status)
+    }
+
     private static func requestPermission(completion: @escaping (Bool) -> Void) {
         PHPhotoLibrary.requestAuthorization(for: .readWrite) { status in
-            completion(status == .authorized || status == .limited)
+            completion(Self.photoLibraryAccessIsGranted(status))
         }
     }
 
