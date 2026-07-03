@@ -22,27 +22,29 @@ enum IRPhotoSaver {
                 return
             }
 
-            guard let albumName = albumName else {
+            switch Self.saveDestination(albumName: albumName) {
+            case .library:
                 PHPhotoLibrary.shared().performChanges({
                     PHAssetChangeRequest.creationRequestForAsset(from: image)
                 })
                 return
-            }
 
-            fetchOrCreateAlbum(named: albumName) { album in
-                guard let album = album else {
-                    writeDiagnostic(for: .albumUnavailable)
-                    return
-                }
-
-                PHPhotoLibrary.shared().performChanges({
-                    let createAsset = PHAssetChangeRequest.creationRequestForAsset(from: image)
-                    guard let placeholder = createAsset.placeholderForCreatedAsset else { return }
-
-                    if let albumChange = PHAssetCollectionChangeRequest(for: album) {
-                        albumChange.addAssets([placeholder] as NSArray)
+            case .album(let albumName):
+                fetchOrCreateAlbum(named: albumName) { album in
+                    guard let album = album else {
+                        writeDiagnostic(for: .albumUnavailable)
+                        return
                     }
-                })
+
+                    PHPhotoLibrary.shared().performChanges({
+                        let createAsset = PHAssetChangeRequest.creationRequestForAsset(from: image)
+                        guard let placeholder = createAsset.placeholderForCreatedAsset else { return }
+
+                        if let albumChange = PHAssetCollectionChangeRequest(for: album) {
+                            albumChange.addAssets([placeholder] as NSArray)
+                        }
+                    })
+                }
             }
         }
     }
@@ -61,6 +63,15 @@ enum IRPhotoSaver {
 
     static func photoLibraryAccessIsGranted(_ status: PHAuthorizationStatus) -> Bool {
         IRPhotoSaverPolicy.photoLibraryAccessIsGranted(status)
+    }
+
+    static func saveDestination(albumName: String?) -> IRPhotoSaverPolicy.SaveDestination {
+        IRPhotoSaverPolicy.saveDestination(albumName: albumName)
+    }
+
+    static func createdAlbumIdentifier(success: Bool, placeholderLocalIdentifier: String?) -> String? {
+        IRPhotoSaverPolicy.createdAlbumIdentifier(success: success,
+                                                  placeholderLocalIdentifier: placeholderLocalIdentifier)
     }
 
     private static func requestPermission(completion: @escaping (Bool) -> Void) {
@@ -86,7 +97,8 @@ enum IRPhotoSaver {
             let create = PHAssetCollectionChangeRequest.creationRequestForAssetCollection(withTitle: name)
             placeholder = create.placeholderForCreatedAssetCollection
         }) { success, _ in
-            guard success, let id = placeholder?.localIdentifier else {
+            guard let id = Self.createdAlbumIdentifier(success: success,
+                                                       placeholderLocalIdentifier: placeholder?.localIdentifier) else {
                 completion(nil)
                 return
             }

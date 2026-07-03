@@ -322,6 +322,50 @@ final class IRAVPlayerTests: XCTestCase {
         XCTAssertEqual(errorInfo.error.code, -1)
     }
 
+    func testPlaybackErrorEventBuilderCopiesSnapshotFields() {
+        let date = Date(timeIntervalSince1970: 42)
+
+        let event = IRAVPlayerErrorPolicy.errorEvent(
+            date: date,
+            URI: "https://example.com/segment.ts",
+            serverAddress: "198.51.100.10",
+            playbackSessionID: "session-1",
+            errorStatusCode: 503,
+            errorDomain: "cdn",
+            errorComment: "unavailable"
+        )
+
+        XCTAssertEqual(event.date, date)
+        XCTAssertEqual(event.URI, "https://example.com/segment.ts")
+        XCTAssertEqual(event.serverAddress, "198.51.100.10")
+        XCTAssertEqual(event.playbackSessionID, "session-1")
+        XCTAssertEqual(event.errorStatusCode, 503)
+        XCTAssertEqual(event.errorDomain, "cdn")
+        XCTAssertEqual(event.errorComment, "unavailable")
+    }
+
+    func testPlaybackErrorExtendedLogDataAppliesOnlyNonEmptyPayloads() {
+        let errorInfo = IRError()
+
+        IRAVPlayerErrorPolicy.applyExtendedLogData(
+            Data(),
+            stringEncoding: String.Encoding.utf16.rawValue,
+            to: errorInfo
+        )
+        XCTAssertNil(errorInfo.extendedLogData)
+        XCTAssertEqual(errorInfo.extendedLogDataStringEncoding, String.Encoding.utf8.rawValue)
+
+        let logData = Data([1, 2, 3])
+        IRAVPlayerErrorPolicy.applyExtendedLogData(
+            logData,
+            stringEncoding: String.Encoding.utf16.rawValue,
+            to: errorInfo
+        )
+
+        XCTAssertEqual(errorInfo.extendedLogData, logData)
+        XCTAssertEqual(errorInfo.extendedLogDataStringEncoding, String.Encoding.utf16.rawValue)
+    }
+
     func testItemStatusPolicyMapsAVPlayerItemStatusesToPlaybackDecisions() {
         XCTAssertEqual(
             IRAVPlayerPlaybackPolicy.itemStatusDecision(status: .unknown, currentState: .none),

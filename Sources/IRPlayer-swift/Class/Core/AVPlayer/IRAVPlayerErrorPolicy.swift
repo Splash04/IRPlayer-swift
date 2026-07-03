@@ -8,22 +8,24 @@ enum IRAVPlayerErrorPolicy {
         if let playerItemError = playerItem?.error {
             errorInfo.error = playerItemError as NSError
 
-            if let extendedLogData = playerItem?.errorLog()?.extendedLogData(), extendedLogData.count > 0 {
-                errorInfo.extendedLogData = extendedLogData
-                errorInfo.extendedLogDataStringEncoding = String.Encoding(rawValue: playerItem?.errorLog()?.extendedLogDataStringEncoding ?? 0).rawValue
-            }
+            let errorLog = playerItem?.errorLog()
+            applyExtendedLogData(
+                errorLog?.extendedLogData(),
+                stringEncoding: String.Encoding(rawValue: errorLog?.extendedLogDataStringEncoding ?? 0).rawValue,
+                to: errorInfo
+            )
 
-            if let errorEvents = playerItem?.errorLog()?.events {
+            if let errorEvents = errorLog?.events {
                 errorInfo.errorEvents = errorEvents.map { event in
-                    let errorEvent = IRErrorEvent()
-                    errorEvent.date = event.date
-                    errorEvent.URI = event.uri
-                    errorEvent.serverAddress = event.serverAddress
-                    errorEvent.playbackSessionID = event.playbackSessionID
-                    errorEvent.errorStatusCode = event.errorStatusCode
-                    errorEvent.errorDomain = event.errorDomain
-                    errorEvent.errorComment = event.errorComment
-                    return errorEvent
+                    errorEvent(
+                        date: event.date,
+                        URI: event.uri,
+                        serverAddress: event.serverAddress,
+                        playbackSessionID: event.playbackSessionID,
+                        errorStatusCode: event.errorStatusCode,
+                        errorDomain: event.errorDomain,
+                        errorComment: event.errorComment
+                    )
                 }
             }
         } else if let playerError = player?.error {
@@ -33,5 +35,29 @@ enum IRAVPlayerErrorPolicy {
         }
 
         return errorInfo
+    }
+
+    static func applyExtendedLogData(_ data: Data?, stringEncoding: UInt, to errorInfo: IRError) {
+        guard let data, !data.isEmpty else { return }
+        errorInfo.extendedLogData = data
+        errorInfo.extendedLogDataStringEncoding = stringEncoding
+    }
+
+    static func errorEvent(date: Date?,
+                           URI: String?,
+                           serverAddress: String?,
+                           playbackSessionID: String?,
+                           errorStatusCode: Int,
+                           errorDomain: String,
+                           errorComment: String?) -> IRErrorEvent {
+        let errorEvent = IRErrorEvent()
+        errorEvent.date = date
+        errorEvent.URI = URI
+        errorEvent.serverAddress = serverAddress
+        errorEvent.playbackSessionID = playbackSessionID
+        errorEvent.errorStatusCode = errorStatusCode
+        errorEvent.errorDomain = errorDomain
+        errorEvent.errorComment = errorComment
+        return errorEvent
     }
 }

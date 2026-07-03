@@ -59,4 +59,31 @@ final class IRPhotoSaverTests: XCTestCase {
             IRPhotoSaverPolicy.photoLibraryAccessIsGranted(.denied)
         )
     }
+
+    func testSaveDestinationUsesLibraryWhenAlbumNameIsMissing() {
+        XCTAssertEqual(IRPhotoSaverPolicy.saveDestination(albumName: nil), .library)
+        XCTAssertEqual(IRPhotoSaver.saveDestination(albumName: nil), .library)
+    }
+
+    func testSaveDestinationUsesAlbumWhenNameIsProvided() {
+        XCTAssertEqual(IRPhotoSaverPolicy.saveDestination(albumName: "Snapshots"), .album("Snapshots"))
+        XCTAssertEqual(IRPhotoSaver.saveDestination(albumName: "Snapshots"), .album("Snapshots"))
+    }
+
+    func testCreatedAlbumIdentifierRequiresSuccessAndPlaceholderID() {
+        XCTAssertNil(
+            IRPhotoSaverPolicy.createdAlbumIdentifier(success: false, placeholderLocalIdentifier: "album-id")
+        )
+        XCTAssertNil(
+            IRPhotoSaverPolicy.createdAlbumIdentifier(success: true, placeholderLocalIdentifier: nil)
+        )
+        XCTAssertEqual(
+            IRPhotoSaverPolicy.createdAlbumIdentifier(success: true, placeholderLocalIdentifier: "album-id"),
+            "album-id"
+        )
+        XCTAssertEqual(
+            IRPhotoSaver.createdAlbumIdentifier(success: true, placeholderLocalIdentifier: "album-id"),
+            "album-id"
+        )
+    }
 }
