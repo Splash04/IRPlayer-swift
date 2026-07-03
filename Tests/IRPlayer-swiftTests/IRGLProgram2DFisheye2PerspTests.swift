@@ -114,6 +114,20 @@ final class IRGLProgram2DFisheye2PerspTests: XCTestCase {
         XCTAssertEqual(params.outputWidth, 777)
     }
 
+    func testMissingPerspShaderParamsKeepFrameAndBoundsHandlingNoOp() {
+        let program = MissingPerspParamsProgram()
+        let frame = IRFFVideoFrame()
+        frame.width = 1920
+        frame.height = 960
+
+        program.setRenderFrame(frame)
+        program.willScroll(dx: 20, dy: -20, transformController: IRGLTransformController())
+
+        XCTAssertNil(program.metalFish2PerspParams)
+        XCTAssertFalse(program.doScrollHorizontal(status: [.toMaxX], transformController: IRGLTransformController()))
+        XCTAssertFalse(program.doScrollVertical(status: [.toMaxY], transformController: IRGLTransformController()))
+    }
+
     func testVerticalBoundsScrollIgnoresInvalidFishRadius() {
         let program = IRGLProgram2DFisheye2Persp()
         guard let params = program.metalFish2PerspParams else {
@@ -196,4 +210,8 @@ final class IRGLProgram2DFisheye2PerspTests: XCTestCase {
         XCTAssertEqual(params.transformX, 10, accuracy: 0.0001)
         XCTAssertEqual(params.transformY, -90, accuracy: 0.0001)
     }
+}
+
+private final class MissingPerspParamsProgram: IRGLProgram2DFisheye2Persp {
+    override func initShaderParams() {}
 }
