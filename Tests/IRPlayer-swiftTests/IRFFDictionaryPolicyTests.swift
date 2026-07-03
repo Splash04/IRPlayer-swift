@@ -7,6 +7,24 @@ final class IRFFDictionaryPolicyTests: XCTestCase {
         XCTAssertNil(IRFFDictionaryPolicy.foundationDictionary(from: nil))
     }
 
+    func testAVDictionaryCreationRejectsEmptyEntries() {
+        XCTAssertNil(IRFFDictionaryPolicy.avDictionary(entries: []))
+    }
+
+    func testFoundationDictionaryBridgesRealAVDictionaryEntries() throws {
+        var avDictionary = try XCTUnwrap(IRFFDictionaryPolicy.avDictionary(entries: [
+            (key: "language", value: "eng"),
+            (key: "title", value: "Camera 1")
+        ]))
+        defer { IRFFDictionaryPolicy.freeAVDictionary(&avDictionary) }
+
+        let dictionary = try XCTUnwrap(IRFFDictionaryPolicy.foundationDictionary(from: avDictionary.rawPointer))
+
+        XCTAssertEqual(dictionary["language"], "eng")
+        XCTAssertEqual(dictionary["title"], "Camera 1")
+        XCTAssertEqual(dictionary.count, 2)
+    }
+
     func testCStringDecodingRejectsMissingAndMalformedUTF8Pointers() throws {
         XCTAssertNil(IRFFDictionaryPolicy.string(fromCString: nil))
 

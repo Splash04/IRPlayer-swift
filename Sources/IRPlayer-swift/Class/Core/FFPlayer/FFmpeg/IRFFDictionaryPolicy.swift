@@ -9,6 +9,29 @@ import Foundation
 import IRFFMpeg
 
 enum IRFFDictionaryPolicy {
+    static func avDictionary(entries: [(key: String, value: String)]) -> AVDictionary? {
+        var avDictionary = AVDictionary(rawPointer: nil)
+
+        for entry in entries {
+            let result = entry.key.withCString { key in
+                entry.value.withCString { value in
+                    av_dict_set(&avDictionary.rawPointer, key, value, 0)
+                }
+            }
+
+            guard result >= 0 else {
+                freeAVDictionary(&avDictionary)
+                return nil
+            }
+        }
+
+        return avDictionary.rawPointer == nil ? nil : avDictionary
+    }
+
+    static func freeAVDictionary(_ avDictionary: inout AVDictionary) {
+        av_dict_free(&avDictionary.rawPointer)
+    }
+
     static func string(fromCString cString: UnsafePointer<CChar>?) -> String? {
         guard let cString else { return nil }
         return String(validatingUTF8: cString)
