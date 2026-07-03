@@ -133,6 +133,7 @@ final class IRGLViewSnapshotTests: XCTestCase {
         XCTAssertNil(IRGLView.texUVTextureLayout(width: 0, height: 1))
         XCTAssertNil(IRGLView.texUVTextureLayout(width: 1, height: 0))
         XCTAssertNil(IRGLView.texUVTextureLayout(width: Int.max, height: 2))
+        XCTAssertNil(IRGLView.texUVTextureLayout(width: Int.max / 8, height: 9))
     }
 
     func testTexUVTextureLayoutCalculatesRGFloatRows() {

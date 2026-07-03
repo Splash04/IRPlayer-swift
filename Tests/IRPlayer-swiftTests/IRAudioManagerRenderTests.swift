@@ -48,6 +48,25 @@ final class IRAudioManagerRenderTests: XCTestCase {
         XCTAssertFalse(output.contains("IRAudioManager did warning"))
     }
 
+    func testRegisterAudioSessionRetriesAfterFailedSetup() {
+        let manager = IRAudioManager()
+        var setupCallCount = 0
+
+        XCTAssertFalse(manager.registerAudioSession {
+            setupCallCount += 1
+            return false
+        })
+        XCTAssertTrue(manager.registerAudioSession {
+            setupCallCount += 1
+            return true
+        })
+        XCTAssertTrue(manager.registerAudioSession {
+            XCTFail("Audio session setup should not be repeated after a retry succeeds")
+            return false
+        })
+        XCTAssertEqual(setupCallCount, 2)
+    }
+
     func testRequiredAudioGraphRejectsMissingGraph() {
         let result = IRAudioManager.requiredAudioGraph(nil, domain: "missing graph")
 
@@ -140,6 +159,20 @@ final class IRAudioManagerRenderTests: XCTestCase {
     }
 
     func testRenderSampleCountRejectsRequestsBeyondBufferCapacity() {
+        XCTAssertNil(
+            IRAudioManager.renderSampleCount(
+                numberOfFrames: 1,
+                numberOfChannels: 1,
+                maximumSampleCount: 0
+            )
+        )
+        XCTAssertNil(
+            IRAudioManager.renderSampleCount(
+                numberOfFrames: 0,
+                numberOfChannels: 1,
+                maximumSampleCount: 1
+            )
+        )
         XCTAssertNil(
             IRAudioManager.renderSampleCount(
                 numberOfFrames: 4097,

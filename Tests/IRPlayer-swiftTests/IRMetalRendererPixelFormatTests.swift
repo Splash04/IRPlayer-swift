@@ -214,6 +214,10 @@ final class IRMetalRendererPixelFormatTests: XCTestCase {
         invalidParams.offsetX = .nan
         XCTAssertFalse(IRMetalRenderer.fish2PanoInputsAreValid(params: invalidParams, texUVTextureCount: 1))
 
+        invalidParams = validParams
+        invalidParams.antialias = 4
+        XCTAssertFalse(IRMetalRenderer.fish2PanoInputsAreValid(params: invalidParams, texUVTextureCount: 16))
+
         XCTAssertFalse(IRMetalRenderer.fish2PanoInputsAreValid(params: validParams, texUVTextureCount: 0))
     }
 

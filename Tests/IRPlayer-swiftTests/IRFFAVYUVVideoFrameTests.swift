@@ -298,6 +298,52 @@ final class IRFFAVYUVVideoFrameTests: XCTestCase {
         XCTAssertEqual(destination, [0, 0, 0])
     }
 
+    func testYUVToolsPolicyChannelFilterIgnoresZeroSizedDestination() {
+        var source = [UInt8](1...4)
+        var destination = [UInt8](repeating: 0xff, count: 1)
+
+        source.withUnsafeMutableBufferPointer { sourceBuffer in
+            destination.withUnsafeMutableBufferPointer { destinationBuffer in
+                IRYUVToolsPolicy.channelFilter(
+                    src: sourceBuffer.baseAddress!,
+                    linesize: 4,
+                    width: 1,
+                    height: 1,
+                    dst: destinationBuffer.baseAddress!,
+                    dstsize: 0,
+                    channelCount: 1
+                )
+            }
+        }
+
+        XCTAssertEqual(destination, [0xff])
+    }
+
+    func testYUVToolsChannelFilterWrapperCopiesAdjustedRows() {
+        var source: [UInt8] = [
+            1, 2, 3, 4,
+            5, 6, 7, 8
+        ]
+        var destination = [UInt8](repeating: 0, count: 4)
+        let destinationCount = destination.count
+
+        source.withUnsafeMutableBufferPointer { sourceBuffer in
+            destination.withUnsafeMutableBufferPointer { destinationBuffer in
+                IRYUVChannelFilter(
+                    src: sourceBuffer.baseAddress!,
+                    linesize: 4,
+                    width: 2,
+                    height: 2,
+                    dst: destinationBuffer.baseAddress!,
+                    dstsize: destinationCount,
+                    channelCount: 1
+                )
+            }
+        }
+
+        XCTAssertEqual(destination, [1, 2, 5, 6])
+    }
+
     func testYUVChannelFilterWrappersRemainSourceCompatible() {
         XCTAssertEqual(
             IRYUVChannelFilterNeedSize(4, 8, 3, 2),
