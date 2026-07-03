@@ -22,4 +22,26 @@ final class IRFFDictionaryPolicyTests: XCTestCase {
             XCTAssertEqual(IRFFDictionaryPolicy.string(fromCString: value), "Camera 1")
         }
     }
+
+    func testFoundationDictionaryEntriesBridgeValidCStringPairsAndSkipMalformedPairs() throws {
+        let invalidValue: [CChar] = [-1, 0]
+
+        try invalidValue.withUnsafeBufferPointer { invalidBuffer in
+            let invalidCString = try XCTUnwrap(invalidBuffer.baseAddress)
+            "language".withCString { languageKey in
+                "eng".withCString { languageValue in
+                    "title".withCString { titleKey in
+                        let bridgedDictionary = IRFFDictionaryPolicy.foundationDictionary(entries: [
+                            (key: languageKey, value: languageValue),
+                            (key: titleKey, value: invalidCString)
+                        ])
+
+                        XCTAssertEqual(bridgedDictionary?["language"], "eng")
+                        XCTAssertNil(bridgedDictionary?["title"])
+                        XCTAssertEqual(bridgedDictionary?.count, 1)
+                    }
+                }
+            }
+        }
+    }
 }
