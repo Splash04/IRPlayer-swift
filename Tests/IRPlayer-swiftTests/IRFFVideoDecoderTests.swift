@@ -29,6 +29,18 @@ final class IRFFVideoDecoderTests: XCTestCase {
             IRFFVideoDecoder.shouldCreateYUVFrame(hasFrame: true, hasLuma: true, hasChromaB: true, hasChromaR: true),
             IRFFVideoDecoderPolicy.shouldCreateYUVFrame(hasFrame: true, hasLuma: true, hasChromaB: true, hasChromaR: true)
         )
+        XCTAssertEqual(
+            IRFFVideoDecoder.packetQueueFallbackDuration(packetDuration: 0,
+                                                         packetSize: 1,
+                                                         isFlushPacket: false,
+                                                         timebase: 0.25,
+                                                         fps: 30),
+            IRFFVideoDecoderPolicy.packetQueueFallbackDuration(packetDuration: 0,
+                                                               packetSize: 1,
+                                                               isFlushPacket: false,
+                                                               timebase: 0.25,
+                                                               fps: 30)
+        )
     }
 
     func testFlushPacketWrapperMatchesSentinelBuilder() {
@@ -179,6 +191,42 @@ final class IRFFVideoDecoderTests: XCTestCase {
                 hasChromaB: true,
                 hasChromaR: true
             )
+        )
+    }
+
+    func testPacketQueueFallbackDurationAppliesOnlyToPayloadPacketsWithoutDuration() {
+        XCTAssertEqual(
+            IRFFVideoDecoder.packetQueueFallbackDuration(packetDuration: 0,
+                                                         packetSize: 32,
+                                                         isFlushPacket: false,
+                                                         timebase: 0.25,
+                                                         fps: 25),
+            0.04,
+            accuracy: 0.0001
+        )
+        XCTAssertEqual(
+            IRFFVideoDecoder.packetQueueFallbackDuration(packetDuration: 4,
+                                                         packetSize: 32,
+                                                         isFlushPacket: false,
+                                                         timebase: 0.25,
+                                                         fps: 25),
+            0
+        )
+        XCTAssertEqual(
+            IRFFVideoDecoder.packetQueueFallbackDuration(packetDuration: 0,
+                                                         packetSize: 0,
+                                                         isFlushPacket: false,
+                                                         timebase: 0.25,
+                                                         fps: 25),
+            0
+        )
+        XCTAssertEqual(
+            IRFFVideoDecoder.packetQueueFallbackDuration(packetDuration: 0,
+                                                         packetSize: 32,
+                                                         isFlushPacket: true,
+                                                         timebase: 0.25,
+                                                         fps: 25),
+            0
         )
     }
 
