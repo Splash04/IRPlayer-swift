@@ -235,6 +235,7 @@ final class IRFFAVYUVVideoFrameTests: XCTestCase {
             IRYUVChannelFilterNeedSize(linesize: 4, width: 8, height: 3, channelCount: 2),
             IRYUVToolsPolicy.channelFilterNeedSize(linesize: 4, width: 8, height: 3, channelCount: 2)
         )
+        XCTAssertEqual(IRYUVToolsPolicy.channelFilterNeedSize(linesize: 0, width: 8, height: 3, channelCount: 2), 0)
         XCTAssertEqual(
             IRYUVImageDimensions32(width: 640, height: 480)?.width,
             IRYUVToolsPolicy.imageDimensions32(width: 640, height: 480)?.width
