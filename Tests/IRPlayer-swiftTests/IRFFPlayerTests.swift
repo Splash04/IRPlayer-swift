@@ -133,6 +133,180 @@ final class IRFFPlayerTests: XCTestCase {
         XCTAssertTrue(plan.hasRemainingFrameBytes)
     }
 
+    func testAudioOutputWritesSilenceWhenNotPlaying() {
+        let ffPlayer = makeFFPlayerWithoutAudioManager()
+        var output = [Float](repeating: 7, count: 4)
+
+        output.withUnsafeMutableBufferPointer { buffer in
+            ffPlayer.audioManager(IRAudioManager(),
+                                  outputData: buffer.baseAddress!,
+                                  numberOfFrames: 2,
+                                  numberOfChannels: 2)
+        }
+
+        XCTAssertEqual(output, [0, 0, 0, 0])
+    }
+
+    func testAudioOutputWritesSilenceWhenPlayingWithoutAudioFrame() {
+        let ffPlayer = makeFFPlayerWithoutAudioManager()
+        ffPlayer.playing = true
+        var output = [Float](repeating: -3, count: 4)
+
+        output.withUnsafeMutableBufferPointer { buffer in
+            ffPlayer.audioManager(IRAudioManager(),
+                                  outputData: buffer.baseAddress!,
+                                  numberOfFrames: 2,
+                                  numberOfChannels: 2)
+        }
+
+        XCTAssertEqual(output, [0, 0, 0, 0])
+    }
+
+    func testAudioOutputStopsFrameAndSilencesWhenSamplesAreMissing() {
+        let ffPlayer = makeFFPlayerWithoutAudioManager()
+        let frame = IRFFAudioFrame()
+        ffPlayer.playing = true
+        ffPlayer.currentAudioFrame = frame
+        var output = [Float](repeating: 4, count: 4)
+
+        output.withUnsafeMutableBufferPointer { buffer in
+            ffPlayer.audioManager(IRAudioManager(),
+                                  outputData: buffer.baseAddress!,
+                                  numberOfFrames: 2,
+                                  numberOfChannels: 2)
+        }
+
+        XCTAssertNil(ffPlayer.currentAudioFrame)
+        XCTAssertFalse(frame.playing)
+        XCTAssertEqual(output, [0, 0, 0, 0])
+    }
+
+    func testAudioOutputCopiesPartialFrameAndPreservesRemainingOffset() throws {
+        let ffPlayer = makeFFPlayerWithoutAudioManager()
+        let frame = makeAudioFrame(samples: [1, 2, 3, 4])
+        ffPlayer.playing = true
+        ffPlayer.currentAudioFrame = frame
+        var output = [Float](repeating: 0, count: 2)
+
+        output.withUnsafeMutableBufferPointer { buffer in
+            ffPlayer.audioManager(IRAudioManager(),
+                                  outputData: buffer.baseAddress!,
+                                  numberOfFrames: 1,
+                                  numberOfChannels: 2)
+        }
+
+        XCTAssertEqual(output, [1, 2])
+        XCTAssertTrue(ffPlayer.currentAudioFrame === frame)
+        XCTAssertEqual(frame.outputOffset, MemoryLayout<Float>.size * 2)
+    }
+
+    func testAudioOutputCopiesFinalFrameAndClearsCurrentFrame() throws {
+        let ffPlayer = makeFFPlayerWithoutAudioManager()
+        let frame = makeAudioFrame(samples: [1, 2, 3, 4])
+        frame.outputOffset = MemoryLayout<Float>.size * 2
+        ffPlayer.playing = true
+        ffPlayer.currentAudioFrame = frame
+        var output = [Float](repeating: 0, count: 4)
+
+        output.withUnsafeMutableBufferPointer { buffer in
+            ffPlayer.audioManager(IRAudioManager(),
+                                  outputData: buffer.baseAddress!,
+                                  numberOfFrames: 2,
+                                  numberOfChannels: 2)
+        }
+
+        XCTAssertEqual(output, [3, 4, 0, 0])
+        XCTAssertNil(ffPlayer.currentAudioFrame)
+        XCTAssertFalse(frame.playing)
+    }
+
+    func testPlaybackCommandsUpdateStateWithoutDecoder() {
+        let ffPlayer = makeFFPlayerWithoutAudioManager()
+        ffPlayer.state = .finished
+
+        ffPlayer.play()
+
+        XCTAssertTrue(ffPlayer.playing)
+        XCTAssertEqual(ffPlayer.state, .playing)
+
+        ffPlayer.pause()
+
+        XCTAssertFalse(ffPlayer.playing)
+        XCTAssertEqual(ffPlayer.state, .suspend)
+
+        ffPlayer.seek(to: 3)
+        ffPlayer.seek(to: 4) { didFinish in
+            XCTFail("Missing decoder should not invoke seek completion, got \(didFinish)")
+        }
+    }
+
+    func testDecoderDelegateCallbacksUpdatePlaybackStateAndProgress() {
+        let abstractPlayer = IRPlayerImp.player()
+        abstractPlayer.manager = nil
+        let ffPlayer = IRFFPlayer.player(with: abstractPlayer)
+        let decoder = FixedDurationFFDecoder(duration: 10)
+        ffPlayer.decoder = decoder
+        ffPlayer.playing = true
+        ffPlayer.progress = 2
+
+        ffPlayer.decoderWillOpenInputStream(decoder)
+        XCTAssertEqual(ffPlayer.state, .buffering)
+
+        ffPlayer.decoderDidPrepareToDecodeFrames(decoder)
+        XCTAssertEqual(ffPlayer.state, .readyToPlay)
+
+        ffPlayer.decoder(decoder, didChangeValueOfBuffering: false)
+        XCTAssertEqual(ffPlayer.state, .playing)
+
+        ffPlayer.decoder(decoder, didChangeValueOfBufferedDuration: 3)
+        XCTAssertEqual(ffPlayer.playableTime, 5)
+
+        ffPlayer.decoder(decoder, didChangeValueOfProgress: 4)
+        XCTAssertEqual(ffPlayer.progress, 4)
+
+        ffPlayer.decoderDidEndOfFile(decoder)
+        XCTAssertEqual(ffPlayer.playableTime, 10)
+
+        ffPlayer.decoderDidPlaybackFinished(decoder)
+        XCTAssertEqual(ffPlayer.state, .finished)
+
+        withExtendedLifetime(abstractPlayer) {}
+    }
+
+    func testDecoderErrorStoresPlayerErrorAndFailsState() {
+        let abstractPlayer = IRPlayerImp.player()
+        abstractPlayer.manager = nil
+        let ffPlayer = IRFFPlayer.player(with: abstractPlayer)
+        let decoder = FixedDurationFFDecoder(duration: 10)
+        let error = NSError(domain: "ff-test", code: 9)
+
+        ffPlayer.decoder(decoder, didError: error)
+
+        XCTAssertEqual(ffPlayer.state, .failed)
+        XCTAssertEqual(abstractPlayer.error?.error.domain, "ff-test")
+        XCTAssertEqual(abstractPlayer.error?.error.code, 9)
+        withExtendedLifetime(abstractPlayer) {}
+    }
+
+    func testLiveStreamPlayableBufferIntervalIsCappedAndDefaulted() {
+        let abstractPlayer = IRPlayerImp.player()
+        abstractPlayer.manager = nil
+        abstractPlayer.isLiveStream = true
+        abstractPlayer.playableBufferInterval = 7
+        let ffPlayer = IRFFPlayer.player(with: abstractPlayer)
+        let decoder = FixedDurationFFDecoder(duration: 0)
+        ffPlayer.decoder = decoder
+
+        ffPlayer.reloadPlayableBufferInterval()
+        XCTAssertTrue(decoder.isLiveStream)
+        XCTAssertEqual(decoder.minBufferedDuration, 0.2, accuracy: 0.0001)
+
+        abstractPlayer.playableBufferInterval = 0
+        ffPlayer.reloadPlayableBufferInterval()
+        XCTAssertEqual(decoder.minBufferedDuration, 0.2, accuracy: 0.0001)
+        withExtendedLifetime(abstractPlayer) {}
+    }
+
     func testStaticPolicyWrappersRemainSourceCompatible() {
         XCTAssertEqual(
             IRFFPlayer.replaceVideoReadiness(hasAbstractPlayer: true, hasContentURL: true, hasDisplayView: false),
@@ -237,6 +411,22 @@ final class IRFFPlayerTests: XCTestCase {
         )
     }
 
+}
+
+private func makeFFPlayerWithoutAudioManager() -> IRFFPlayer {
+    let abstractPlayer = IRPlayerImp.player()
+    abstractPlayer.manager = nil
+    return IRFFPlayer.player(with: abstractPlayer)
+}
+
+private func makeAudioFrame(samples values: [Float]) -> IRFFAudioFrame {
+    let frame = IRFFAudioFrame()
+    frame.setSamplesLength(values.count * MemoryLayout<Float>.size)
+    for (index, value) in values.enumerated() {
+        frame.samples?[index] = value
+    }
+    frame.startPlaying()
+    return frame
 }
 
 private final class FixedDurationFFDecoder: IRFFDecoder {
