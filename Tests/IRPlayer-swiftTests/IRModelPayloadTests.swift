@@ -103,6 +103,7 @@ final class IRModelPayloadTests: XCTestCase {
     func testStatePayloadDefaultsOutOfRangeRawValues() {
         XCTAssertEqual(IRPlayerNotificationPayload.state(NSNumber(value: Int.max)), .none)
         XCTAssertEqual(IRPlayerNotificationPayload.state(Int.min), .none)
+        XCTAssertEqual(IRPlayerNotificationPayloadPolicy.state(Int.max), .none)
     }
 
     func testStatePayloadAcceptsTypedStatesAndIntegerRawValues() {
@@ -175,11 +176,15 @@ final class IRModelPayloadTests: XCTestCase {
         XCTAssertEqual(IRPlayerNotificationPayload.cgFloat(Double(6.5)), 6.5, accuracy: 0.0001)
         XCTAssertEqual(IRPlayerNotificationPayload.cgFloat(Float(8.5)), 8.5, accuracy: 0.0001)
         XCTAssertEqual(IRPlayerNotificationPayload.cgFloat(10), 10, accuracy: 0.0001)
+        XCTAssertEqual(IRPlayerNotificationPayload.cgFloat(nil), 0)
         XCTAssertEqual(IRPlayerNotificationPayload.cgFloat("not-a-number"), 0)
         XCTAssertEqual(IRPlayerNotificationPayload.cgFloat(true), 0)
         XCTAssertEqual(IRPlayerNotificationPayload.cgFloat(NSNumber(value: false)), 0)
         XCTAssertEqual(IRPlayerNotificationPayload.cgFloat(CGFloat.nan), 0)
+        XCTAssertEqual(IRPlayerNotificationPayload.cgFloat(CGFloat.infinity), 0)
         XCTAssertEqual(IRPlayerNotificationPayload.cgFloat(Float.nan), 0)
+        XCTAssertEqual(IRPlayerNotificationPayload.cgFloat(Float.infinity), 0)
+        XCTAssertEqual(IRPlayerNotificationPayload.cgFloat(Double.nan), 0)
         XCTAssertEqual(IRPlayerNotificationPayload.cgFloat(Double.infinity), 0)
     }
 

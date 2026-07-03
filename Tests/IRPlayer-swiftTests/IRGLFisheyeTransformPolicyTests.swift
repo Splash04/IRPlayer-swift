@@ -122,6 +122,13 @@ final class IRGLFisheyeTransformPolicyTests: XCTestCase {
             IRGLFisheyeTransformPolicy.NormalizedScope(lat: 50, lng: -75)
         )
     }
+
+    func testNormalizedScopeUsesZeroBoundsWhenRangeIsMissing() {
+        XCTAssertEqual(
+            IRGLFisheyeTransformPolicy.normalizedScope(lat: 30, lng: 45, fov: 60, range: nil),
+            IRGLFisheyeTransformPolicy.NormalizedScope(lat: 0, lng: 0)
+        )
+    }
 }
 
 private func assertScopeRange(
