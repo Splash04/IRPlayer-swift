@@ -152,6 +152,41 @@ final class IRGLViewSnapshotTests: XCTestCase {
         XCTAssertNil(IRGLViewPolicy.texUVTextureLayout(width: Int.max, height: 2))
     }
 
+    func testTranslationVectorRejectsInvalidScopeValues() {
+        XCTAssertEqual(IRGLViewPolicy.translationVector(for: nil), SIMD2<Float>(repeating: 0))
+        XCTAssertEqual(
+            IRGLViewPolicy.translationVector(for: IRGLScope2D(scaleX: 1, scaleY: 1, offsetX: 0, offsetY: 0, panDegree: 0, w: 0, h: 100)),
+            SIMD2<Float>(repeating: 0)
+        )
+        XCTAssertEqual(
+            IRGLViewPolicy.translationVector(for: IRGLScope2D(scaleX: .nan, scaleY: 1, offsetX: 0, offsetY: 0, panDegree: 0, w: 100, h: 100)),
+            SIMD2<Float>(repeating: 0)
+        )
+        XCTAssertEqual(
+            IRGLViewPolicy.translationVector(for: IRGLScope2D(scaleX: 1, scaleY: 1, offsetX: .infinity, offsetY: 0, panDegree: 0, w: 100, h: 100)),
+            SIMD2<Float>(repeating: 0)
+        )
+    }
+
+    func testTranslationVectorCalculatesOverflowingAxesFromOffsets() {
+        let scope = IRGLScope2D(scaleX: 2, scaleY: 1.5, offsetX: 25, offsetY: 10, panDegree: 0, w: 200, h: 100)
+        let vector = IRGLViewPolicy.translationVector(for: scope)
+
+        XCTAssertEqual(vector.x, -0.5, accuracy: 0.0001)
+        XCTAssertEqual(vector.y, 0.2, accuracy: 0.0001)
+    }
+
+    func testTranslationVectorZerosAxesThatFitInsideViewport() {
+        let scope = IRGLScope2D(scaleX: 0.75, scaleY: 1.25, offsetX: 80, offsetY: 20, panDegree: 0, w: 200, h: 100)
+        let vector = IRGLViewPolicy.translationVector(for: scope)
+
+        XCTAssertEqual(vector.x, 0, accuracy: 0.0001)
+        XCTAssertEqual(vector.y, -0.25, accuracy: 0.0001)
+
+        let fittedScope = IRGLScope2D(scaleX: 0.75, scaleY: 0.5, offsetX: 80, offsetY: 20, panDegree: 0, w: 200, h: 100)
+        XCTAssertEqual(IRGLViewPolicy.translationVector(for: fittedScope), SIMD2<Float>(repeating: 0))
+    }
+
     func testFittedImageTransformCalculatesAspectFitScaleAndCentering() throws {
         let transform = try XCTUnwrap(
             IRGLView.fittedImageTransform(imageExtent: CGRect(x: 0, y: 0, width: 400, height: 200),
