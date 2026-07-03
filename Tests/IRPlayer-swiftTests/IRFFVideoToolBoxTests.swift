@@ -171,6 +171,29 @@ final class IRFFVideoToolBoxTests: XCTestCase {
         }
     }
 
+    func testConvertedNALBlockPayloadFreeBlockReleasesAllocatedDemuxBuffer() throws {
+        guard let rawMemoryBlock = malloc(4) else {
+            throw XCTSkip("Allocator unavailable")
+        }
+        var didReleaseMemoryBlock = false
+        defer {
+            if !didReleaseMemoryBlock {
+                free(rawMemoryBlock)
+            }
+        }
+
+        let memoryBlock = rawMemoryBlock.assumingMemoryBound(to: UInt8.self)
+        let payload = try XCTUnwrap(IRFFVideoToolBox.convertedNALBlockPayload(
+            memoryBlock: memoryBlock,
+            demuxSize: 4,
+            packetSize: 4
+        ))
+        let freeBlock = try XCTUnwrap(payload.customBlockSource.FreeBlock)
+
+        freeBlock(payload.customBlockSource.refCon, rawMemoryBlock, payload.blockLength)
+        didReleaseMemoryBlock = true
+    }
+
     private func assertThreeByteNALPayload(_ bytes: [UInt8], isValid: Bool, file: StaticString = #filePath, line: UInt = #line) throws {
         var packet = AVPacket()
         var bytes = bytes
