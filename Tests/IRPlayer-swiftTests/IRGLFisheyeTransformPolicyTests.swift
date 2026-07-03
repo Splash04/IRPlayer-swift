@@ -71,6 +71,7 @@ final class IRGLFisheyeTransformPolicyTests: XCTestCase {
 
         XCTAssertNil(IRGLFisheyeTransformPolicy.scrollDecision(currentLat: 0, currentLng: 0, dx: .nan, dy: 0, friction: 0.15, range: range))
         XCTAssertNil(IRGLFisheyeTransformPolicy.scrollDecision(currentLat: 0, currentLng: 0, dx: 0, dy: .infinity, friction: 0.15, range: range))
+        XCTAssertNil(IRGLFisheyeTransformPolicy.scrollDecision(currentLat: 0, currentLng: 0, dx: 0, dy: 0, friction: .nan, range: range))
     }
 
     func testScrollDecisionAppliesFrictionAndReportsBounds() throws {
@@ -87,6 +88,14 @@ final class IRGLFisheyeTransformPolicyTests: XCTestCase {
         XCTAssertEqual(minDecision.lng, -150, accuracy: 0.0001)
         XCTAssertTrue(minDecision.status.contains(.toMinX))
         XCTAssertTrue(minDecision.status.contains(.toMinY))
+    }
+
+    func testScrollDecisionUsesZeroBoundsWhenRangeIsMissing() throws {
+        let decision = try XCTUnwrap(IRGLFisheyeTransformPolicy.scrollDecision(currentLat: 0, currentLng: 0, dx: 1, dy: -1, friction: 1, range: nil))
+
+        XCTAssertEqual(decision.lat, 1, accuracy: 0.0001)
+        XCTAssertEqual(decision.lng, -1, accuracy: 0.0001)
+        XCTAssertTrue(decision.status.isEmpty)
     }
 
     func testNormalizedScopeWrapsAndClampsLatitudeAndLongitude() {
@@ -107,6 +116,10 @@ final class IRGLFisheyeTransformPolicyTests: XCTestCase {
         XCTAssertEqual(
             IRGLFisheyeTransformPolicy.normalizedScope(lat: 0, lng: -540, fov: 60, range: range),
             IRGLFisheyeTransformPolicy.NormalizedScope(lat: 0, lng: 75)
+        )
+        XCTAssertEqual(
+            IRGLFisheyeTransformPolicy.normalizedScope(lat: -450, lng: 181, fov: 60, range: range),
+            IRGLFisheyeTransformPolicy.NormalizedScope(lat: 50, lng: -75)
         )
     }
 }
