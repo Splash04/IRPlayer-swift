@@ -694,6 +694,42 @@ final class IRMetalRendererPixelFormatTests: XCTestCase {
         }
     }
 
+    func testRenderFisheyeDrawsValidNV12Frame() throws {
+        let renderer = try makeRenderer()
+        guard renderer.pipelineNV12Mesh != nil else {
+            throw XCTSkip("NV12 mesh Metal pipeline unavailable")
+        }
+        let mesh = try makeFisheyeMesh(renderer: renderer)
+        let drawable = try makeOffscreenDrawable(renderer: renderer, width: 4, height: 4)
+        let frame = IRFFCVYUVVideoFrame(pixelBuffer: try makePixelBuffer(format: kCVPixelFormatType_420YpCbCr8BiPlanarFullRange))
+
+        XCTAssertTrue(renderer.renderFisheye(frame: frame,
+                                            mesh: mesh,
+                                            mvp: makeIdentityMatrix(),
+                                            textureMatrix: makeIdentityMatrix(),
+                                            to: drawable,
+                                            drawableSize: CGSize(width: 4, height: 4),
+                                            viewport: CGRect(x: 0, y: 0, width: 4, height: 4)))
+    }
+
+    func testRenderFisheyeFallsBackToBGRAMeshForBGRAFrame() throws {
+        let renderer = try makeRenderer()
+        guard renderer.pipelineRGBMesh != nil else {
+            throw XCTSkip("RGB mesh Metal pipeline unavailable")
+        }
+        let mesh = try makeFisheyeMesh(renderer: renderer)
+        let drawable = try makeOffscreenDrawable(renderer: renderer, width: 4, height: 4)
+        let frame = IRFFCVYUVVideoFrame(pixelBuffer: try makePixelBuffer(format: kCVPixelFormatType_32BGRA))
+
+        XCTAssertTrue(renderer.renderFisheye(frame: frame,
+                                            mesh: mesh,
+                                            mvp: makeIdentityMatrix(),
+                                            textureMatrix: makeIdentityMatrix(),
+                                            to: drawable,
+                                            drawableSize: CGSize(width: 4, height: 4),
+                                            viewport: CGRect(x: 0, y: 0, width: 4, height: 4)))
+    }
+
     func testRenderFisheyeMultiDrawsValidI420FrameAcrossViewports() throws {
         let renderer = try makeRenderer()
         guard renderer.pipelineI420Mesh != nil else {
