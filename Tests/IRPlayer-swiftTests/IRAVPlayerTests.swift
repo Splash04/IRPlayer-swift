@@ -200,6 +200,43 @@ final class IRAVPlayerTests: XCTestCase {
         withExtendedLifetime(abstractPlayer) {}
     }
 
+    func testPlayResetsFinishedPlaybackBeforeReplacement() {
+        let abstractPlayer = IRPlayerImp.player()
+        let avPlayer = IRAVPlayer(abstractPlayer: abstractPlayer)
+
+        avPlayer.avPlayer = AVPlayer()
+        avPlayer.state = .finished
+        avPlayer.needPlay = true
+        avPlayer.seeking = true
+        avPlayer.readyToPlayTime = 42
+
+        avPlayer.play()
+
+        XCTAssertEqual(avPlayer.state, .none)
+        XCTAssertNil(avPlayer.avPlayer)
+        XCTAssertFalse(avPlayer.needPlay)
+        XCTAssertFalse(avPlayer.seeking)
+        XCTAssertEqual(avPlayer.readyToPlayTime, 0)
+        withExtendedLifetime(abstractPlayer) {}
+    }
+
+    func testPlayDelayedRetryRunsForActiveState() {
+        let abstractPlayer = IRPlayerImp.player()
+        let avPlayer = IRAVPlayer(abstractPlayer: abstractPlayer)
+        let item = AVPlayerItem(url: missingMediaURL(named: "retry-placeholder.mp4"))
+
+        avPlayer.avPlayerItem = item
+        avPlayer.avPlayer = AVPlayer(playerItem: item)
+        avPlayer.state = .playing
+
+        avPlayer.play()
+        waitForMainQueue(after: 0.35)
+
+        XCTAssertEqual(avPlayer.state, .playing)
+        XCTAssertNotNil(avPlayer.avPlayer)
+        withExtendedLifetime(abstractPlayer) {}
+    }
+
     func testAutoPlayFlagsSuspendActivePlaybackAndClearAfterAttempt() {
         let abstractPlayer = IRPlayerImp.player()
         let avPlayer = IRAVPlayer(abstractPlayer: abstractPlayer)
@@ -693,6 +730,48 @@ final class IRAVPlayerTests: XCTestCase {
         withExtendedLifetime(abstractPlayer) {}
     }
 
+    func testFailureWithoutAbstractPlayerStillMarksPlayerFailed() throws {
+        var retainedPlayer: IRAVPlayer?
+        autoreleasepool {
+            let abstractPlayer = IRPlayerImp.player()
+            retainedPlayer = IRAVPlayer(abstractPlayer: abstractPlayer)
+        }
+        let avPlayer = try XCTUnwrap(retainedPlayer)
+
+        avPlayer.avAssetPrepareFailed(error: nil)
+
+        XCTAssertEqual(avPlayer.state, .failed)
+        XCTAssertNil(avPlayer.abstractPlayer)
+        avPlayer.displayLink?.invalidate()
+    }
+
+    func testFailedStatusObservationPostsPlaybackError() throws {
+        let abstractPlayer = IRPlayerImp.player()
+        let avPlayer = IRAVPlayer(abstractPlayer: abstractPlayer)
+        let item = AVPlayerItem(url: missingMediaURL(named: "missing-status-\(UUID().uuidString).mp4"))
+
+        avPlayer.avPlayerItem = item
+        avPlayer.avPlayer = AVPlayer(playerItem: item)
+        avPlayer.avPlayer?.play()
+        waitUntilFailed(item)
+
+        let expectation = observeNotification(
+            name: IRPlayerErrorNotificationName,
+            object: abstractPlayer
+        ) { notification in
+            let playerError = IRModel.error(fromUserInfo: try XCTUnwrap(notification.userInfo))
+            XCTAssertNotEqual(playerError.error.domain, "")
+        }
+
+        avPlayer.observeValue(forKeyPath: "status", of: item, change: nil, context: nil)
+
+        wait(for: [expectation], timeout: 1.0)
+        XCTAssertEqual(avPlayer.state, .failed)
+        XCTAssertEqual(avPlayer.readyToPlayTime, 0)
+        XCTAssertNotNil(abstractPlayer.error)
+        withExtendedLifetime(abstractPlayer) {}
+    }
+
     func testPixelBufferAtCurrentTimeReturnsNilWhenPlayerItemIsMissing() {
         let abstractPlayer = IRPlayerImp.player()
         let avPlayer = IRAVPlayer(abstractPlayer: abstractPlayer)
@@ -743,6 +822,47 @@ final class IRAVPlayerTests: XCTestCase {
         withExtendedLifetime(abstractPlayer) {}
     }
 
+    func testSetupAVPlayerItemWithManualAssetCreatesOutputAndCleanRemovesOutputs() throws {
+        let abstractPlayer = IRPlayerImp.player()
+        let avPlayer = IRAVPlayer(abstractPlayer: abstractPlayer)
+        let url = try makeTemporaryTinyVideoFile()
+
+        avPlayer.avAsset = AVURLAsset(url: url)
+        avPlayer.setupAVPlayerItem(autoLoadedAsset: false)
+
+        let item = try XCTUnwrap(avPlayer.avPlayerItem)
+        let output = try XCTUnwrap(avPlayer.avOutput)
+        XCTAssertTrue(item.outputs.contains { $0 === output })
+
+        avPlayer.cleanAVPlayerItem()
+
+        XCTAssertNil(avPlayer.avPlayerItem)
+        XCTAssertFalse(item.outputs.contains { $0 === output })
+        withExtendedLifetime(abstractPlayer) {}
+    }
+
+    func testTrySetupOutputRebuildsOutputForReadyItemAfterWarmup() throws {
+        let abstractPlayer = IRPlayerImp.player()
+        let avPlayer = IRAVPlayer(abstractPlayer: abstractPlayer)
+        let url = try makeTemporaryTinyVideoFile()
+
+        avPlayer.avAsset = AVURLAsset(url: url)
+        avPlayer.setupAVPlayerItem(autoLoadedAsset: true)
+        let item = try XCTUnwrap(avPlayer.avPlayerItem)
+        avPlayer.setupAVPlayer()
+        waitUntilReadyToPlay(item)
+        let originalOutput = try XCTUnwrap(avPlayer.avOutput)
+
+        avPlayer.readyToPlayTime = Date().timeIntervalSince1970 - 1
+        avPlayer.trySetupOutput()
+
+        let rebuiltOutput = try XCTUnwrap(avPlayer.avOutput)
+        XCTAssertFalse(rebuiltOutput === originalOutput)
+        XCTAssertTrue(item.outputs.contains { $0 === rebuiltOutput })
+        XCTAssertFalse(item.outputs.contains { $0 === originalOutput })
+        withExtendedLifetime(abstractPlayer) {}
+    }
+
     func testReplaceVideoWithNormalURLConfiguresAVPlayerLayerRenderer() throws {
         let player = IRPlayerImp.player()
         player.manager = nil
@@ -758,10 +878,7 @@ final class IRAVPlayerTests: XCTestCase {
     }
 
     func testGeneratedNormalVideoConfiguresTracksAndPlaybackControls() throws {
-        let url = try makeTinyVideoFile()
-        addTeardownBlock {
-            try? FileManager.default.removeItem(at: url)
-        }
+        let url = try makeTemporaryTinyVideoFile()
         let player = IRPlayerImp.player()
         player.manager = nil
         player.decoder = IRPlayerDecoder.AVPlayerDecoder()
@@ -809,6 +926,30 @@ final class IRAVPlayerTests: XCTestCase {
 
         avPlayer.pause()
         XCTAssertEqual(avPlayer.state, .suspend)
+        withExtendedLifetime(player) {}
+    }
+
+    func testGeneratedVRVideoConfiguresPixelBufferRendererAndCompletesAsyncAssetLoad() throws {
+        let url = try makeTemporaryTinyVideoFile()
+        let player = IRPlayerImp.player()
+        player.manager = nil
+        player.decoder = IRPlayerDecoder.AVPlayerDecoder()
+        let displayView = try XCTUnwrap(player.view as? IRGLView)
+
+        player.replaceVideoWithURL(contentURL: url as NSURL, videoType: .vr)
+
+        let avPlayer = try XCTUnwrap(mirroredAVPlayer(from: player))
+        let item = try XCTUnwrap(avPlayer.avPlayerItem)
+        let asset = try XCTUnwrap(avPlayer.avAsset)
+        waitUntilReadyToPlay(item)
+        waitUntilAssetKeysResolved(asset)
+        waitForMainQueue(after: 0.2)
+
+        XCTAssertEqual(displayView.rendererType, .AVPlayerPixelBufferVR)
+        XCTAssertNotNil(avPlayer.avOutput)
+        if let output = avPlayer.avOutput {
+            XCTAssertTrue(item.outputs.contains { $0 === output })
+        }
         withExtendedLifetime(player) {}
     }
 
@@ -876,6 +1017,14 @@ final class IRAVPlayerTests: XCTestCase {
         URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(name)
     }
 
+    private func makeTemporaryTinyVideoFile() throws -> URL {
+        let url = try makeTinyVideoFile()
+        addTeardownBlock {
+            try? FileManager.default.removeItem(at: url)
+        }
+        return url
+    }
+
     private func waitUntilReadyToPlay(_ item: AVPlayerItem) {
         let ready = expectation(description: "AVPlayerItem ready")
         var didFulfill = false
@@ -898,6 +1047,46 @@ final class IRAVPlayerTests: XCTestCase {
         }
         wait(for: [ready], timeout: 10)
         observation?.invalidate()
+    }
+
+    private func waitUntilFailed(_ item: AVPlayerItem) {
+        let failed = expectation(description: "AVPlayerItem failed")
+        var didFulfill = false
+        var observation: NSKeyValueObservation?
+        observation = item.observe(\.status, options: [.initial, .new]) { item, _ in
+            guard !didFulfill else { return }
+            switch item.status {
+            case .failed:
+                didFulfill = true
+                failed.fulfill()
+            case .readyToPlay:
+                didFulfill = true
+                XCTFail("AVPlayerItem unexpectedly became ready.")
+                failed.fulfill()
+            case .unknown:
+                break
+            @unknown default:
+                break
+            }
+        }
+        wait(for: [failed], timeout: 5)
+        observation?.invalidate()
+    }
+
+    private func waitUntilAssetKeysResolved(_ asset: AVURLAsset) {
+        let loaded = expectation(description: "AVURLAsset keys resolved")
+        asset.loadValuesAsynchronously(forKeys: IRAVPlayer.AVAssetLoadKeys) {
+            loaded.fulfill()
+        }
+        wait(for: [loaded], timeout: 10)
+    }
+
+    private func waitForMainQueue(after delay: TimeInterval = 0) {
+        let settled = expectation(description: "main queue settled")
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            settled.fulfill()
+        }
+        wait(for: [settled], timeout: delay + 1)
     }
 
     private func observeNotification(
