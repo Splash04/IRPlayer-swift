@@ -200,6 +200,29 @@ final class IRAVPlayerTests: XCTestCase {
         withExtendedLifetime(abstractPlayer) {}
     }
 
+    func testAutoPlayFlagsSuspendActivePlaybackAndClearAfterAttempt() {
+        let abstractPlayer = IRPlayerImp.player()
+        let avPlayer = IRAVPlayer(abstractPlayer: abstractPlayer)
+
+        avPlayer.state = .playing
+        avPlayer.avPlayer = nil
+
+        avPlayer.setAutoPlayIfNeed()
+
+        XCTAssertEqual(avPlayer.state, .suspend)
+        XCTAssertTrue(avPlayer.autoNeedPlay)
+
+        avPlayer.cancelAutoPlayIfNeed()
+        XCTAssertFalse(avPlayer.autoNeedPlay)
+
+        avPlayer.autoNeedPlay = true
+        avPlayer.autoPlayIfNeed()
+
+        XCTAssertFalse(avPlayer.autoNeedPlay)
+        XCTAssertEqual(avPlayer.state, .none)
+        withExtendedLifetime(abstractPlayer) {}
+    }
+
     func testPauseIgnoresMissingPlayerInstance() {
         let abstractPlayer = IRPlayerImp.player()
         let avPlayer = IRAVPlayer(abstractPlayer: abstractPlayer)
@@ -220,6 +243,18 @@ final class IRAVPlayerTests: XCTestCase {
         avPlayer.setPlayIfNeeded()
 
         XCTAssertEqual(avPlayer.state, .playing)
+        XCTAssertFalse(avPlayer.needPlay)
+        withExtendedLifetime(abstractPlayer) {}
+    }
+
+    func testCancelPlayIfNeededClearsPendingPlayFlag() {
+        let abstractPlayer = IRPlayerImp.player()
+        let avPlayer = IRAVPlayer(abstractPlayer: abstractPlayer)
+
+        avPlayer.needPlay = true
+
+        avPlayer.cancelPlayIfNeeded()
+
         XCTAssertFalse(avPlayer.needPlay)
         withExtendedLifetime(abstractPlayer) {}
     }
@@ -291,6 +326,17 @@ final class IRAVPlayerTests: XCTestCase {
         withExtendedLifetime(abstractPlayer) {}
     }
 
+    func testPresentationSizeAndBitrateReturnFallbacksWhenPlayerItemIsMissing() {
+        let abstractPlayer = IRPlayerImp.player()
+        let avPlayer = IRAVPlayer(abstractPlayer: abstractPlayer)
+
+        avPlayer.avPlayerItem = nil
+
+        XCTAssertEqual(avPlayer.presentationSize, .zero)
+        XCTAssertEqual(avPlayer.bitrate, 0)
+        withExtendedLifetime(abstractPlayer) {}
+    }
+
     func testReloadVolumeIgnoresMissingPlayerInstance() {
         let abstractPlayer = IRPlayerImp.player()
         let avPlayer = IRAVPlayer(abstractPlayer: abstractPlayer)
@@ -314,6 +360,22 @@ final class IRAVPlayerTests: XCTestCase {
         XCTAssertNil(retainedPlayer?.abstractPlayer)
         retainedPlayer?.reloadVolume()
         retainedPlayer?.displayLink?.invalidate()
+    }
+
+    func testReloadPlayableTimeClearsWhenItemIsMissingOrNotReady() {
+        let abstractPlayer = IRPlayerImp.player()
+        let avPlayer = IRAVPlayer(abstractPlayer: abstractPlayer)
+        avPlayer.playableTime = 5
+
+        avPlayer.avPlayerItem = nil
+        avPlayer.reloadPlayableTime()
+        XCTAssertEqual(avPlayer.playableTime, 0)
+
+        avPlayer.playableTime = 6
+        avPlayer.avPlayerItem = AVPlayerItem(url: missingMediaURL())
+        avPlayer.reloadPlayableTime()
+        XCTAssertEqual(avPlayer.playableTime, 0)
+        withExtendedLifetime(abstractPlayer) {}
     }
 
     func testPlaybackErrorInfoFallsBackWhenPlayerItemAndPlayerAreMissing() {
@@ -572,6 +634,30 @@ final class IRAVPlayerTests: XCTestCase {
         withExtendedLifetime(abstractPlayer) {}
     }
 
+    func testLoadedTimeRangesObservationReloadsPlayableTimeForMatchingItem() {
+        let abstractPlayer = IRPlayerImp.player()
+        let avPlayer = IRAVPlayer(abstractPlayer: abstractPlayer)
+        let item = AVPlayerItem(url: missingMediaURL())
+
+        avPlayer.avPlayerItem = item
+        avPlayer.playableTime = 5
+        avPlayer.observeValue(forKeyPath: "loadedTimeRanges", of: item, change: nil, context: nil)
+
+        XCTAssertEqual(avPlayer.playableTime, 0)
+        XCTAssertFalse(avPlayer.needPlay)
+        withExtendedLifetime(abstractPlayer) {}
+    }
+
+    func testFinishedNotificationMarksPlayerFinished() {
+        let abstractPlayer = IRPlayerImp.player()
+        let avPlayer = IRAVPlayer(abstractPlayer: abstractPlayer)
+
+        avPlayer.avplayerItemDidPlayToEnd(Notification(name: .AVPlayerItemDidPlayToEndTime))
+
+        XCTAssertEqual(avPlayer.state, .finished)
+        withExtendedLifetime(abstractPlayer) {}
+    }
+
     func testAVAssetPrepareFailureDoesNotPrintDebugOutput() {
         let abstractPlayer = IRPlayerImp.player()
         let avPlayer = IRAVPlayer(abstractPlayer: abstractPlayer)
@@ -618,6 +704,16 @@ final class IRAVPlayerTests: XCTestCase {
         withExtendedLifetime(abstractPlayer) {}
     }
 
+    func testPixelBufferAtCurrentTimeReturnsNilWhileSeeking() {
+        let abstractPlayer = IRPlayerImp.player()
+        let avPlayer = IRAVPlayer(abstractPlayer: abstractPlayer)
+
+        avPlayer.seeking = true
+
+        XCTAssertNil(avPlayer.pixelBufferAtCurrentTime())
+        withExtendedLifetime(abstractPlayer) {}
+    }
+
     func testSetupOutputIgnoresMissingPlayerItemWithoutDebugOutput() {
         let abstractPlayer = IRPlayerImp.player()
         let avPlayer = IRAVPlayer(abstractPlayer: abstractPlayer)
@@ -629,6 +725,69 @@ final class IRAVPlayerTests: XCTestCase {
 
         XCTAssertNil(avPlayer.avOutput)
         XCTAssertEqual(output, "")
+        withExtendedLifetime(abstractPlayer) {}
+    }
+
+    func testTrySetupOutputIgnoresMissingOrNotReadyPlayerItem() {
+        let abstractPlayer = IRPlayerImp.player()
+        let avPlayer = IRAVPlayer(abstractPlayer: abstractPlayer)
+
+        avPlayer.avPlayerItem = nil
+        avPlayer.readyToPlayTime = Date().timeIntervalSince1970 - 1
+        avPlayer.trySetupOutput()
+        XCTAssertNil(avPlayer.avOutput)
+
+        avPlayer.avPlayerItem = AVPlayerItem(url: missingMediaURL())
+        avPlayer.trySetupOutput()
+        XCTAssertNil(avPlayer.avOutput)
+        withExtendedLifetime(abstractPlayer) {}
+    }
+
+    func testReplaceVideoWithNormalURLConfiguresAVPlayerLayerRenderer() throws {
+        let player = IRPlayerImp.player()
+        player.manager = nil
+        player.decoder = IRPlayerDecoder.AVPlayerDecoder()
+        let displayView = try XCTUnwrap(player.view as? IRGLView)
+
+        player.replaceVideoWithURL(contentURL: missingMediaURL() as NSURL, videoType: .normal)
+
+        XCTAssertEqual(displayView.rendererType, .AVPlayerLayer)
+        XCTAssertEqual(player.state, .none)
+        XCTAssertEqual(player.presentationSize, .zero)
+        withExtendedLifetime(player) {}
+    }
+
+    func testReplaceVideoWithCustomAndFisheyeURLsLeaveRendererUnconfigured() throws {
+        let player = IRPlayerImp.player()
+        player.manager = nil
+        player.decoder = IRPlayerDecoder.AVPlayerDecoder()
+        let displayView = try XCTUnwrap(player.view as? IRGLView)
+
+        player.replaceVideoWithURL(contentURL: missingMediaURL() as NSURL, videoType: .custom)
+
+        XCTAssertEqual(displayView.rendererType, .empty)
+        XCTAssertEqual(player.state, .none)
+
+        player.replaceVideoWithURL(contentURL: missingMediaURL(named: "missing-fisheye.mp4") as NSURL, videoType: .fisheye)
+
+        XCTAssertEqual(displayView.rendererType, .empty)
+        XCTAssertEqual(player.state, .none)
+        withExtendedLifetime(player) {}
+    }
+
+    func testSetupTrackInfoAndAudioTrackSelectionIgnoreMissingAssetGroups() {
+        let abstractPlayer = IRPlayerImp.player()
+        let avPlayer = IRAVPlayer(abstractPlayer: abstractPlayer)
+
+        avPlayer.avAsset = nil
+        avPlayer.setupTrackInfo()
+        avPlayer.selectAudioTrack(index: 7)
+
+        XCTAssertFalse(avPlayer.videoEnable)
+        XCTAssertFalse(avPlayer.audioEnable)
+        XCTAssertTrue(avPlayer.videoTracks.isEmpty)
+        XCTAssertTrue(avPlayer.audioTracks.isEmpty)
+        XCTAssertNil(avPlayer.audioTrack)
         withExtendedLifetime(abstractPlayer) {}
     }
 
@@ -656,6 +815,10 @@ final class IRAVPlayerTests: XCTestCase {
 
         XCTAssertEqual(output, "")
         withExtendedLifetime(abstractPlayer) {}
+    }
+
+    private func missingMediaURL(named name: String = "missing.mp4") -> URL {
+        URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(name)
     }
 
     private func observeNotification(
