@@ -1,3 +1,4 @@
+import CoreVideo
 import UIKit
 import XCTest
 @testable import IRPlayer_swift
@@ -49,6 +50,19 @@ final class IRGLViewSnapshotTests: XCTestCase {
         snapshotView.willDoSnapshot = false
     }
 
+    func testInitGLCanReadMainThreadStateFromBackgroundQueue() {
+        let view = IRGLView(frame: CGRect(x: 0, y: 0, width: 12, height: 8))
+        let finished = expectation(description: "background initGL finished")
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            view.initGL(with: .NV12_IRPixelFormat)
+            finished.fulfill()
+        }
+
+        wait(for: [finished], timeout: 2)
+        XCTAssertFalse(view.getRenderModes().isEmpty)
+    }
+
     func testCreateImageFromFramebufferReturnsImageForNonZeroView() {
         let view = IRGLView(frame: CGRect(x: 0, y: 0, width: 12, height: 8))
 
@@ -68,6 +82,29 @@ final class IRGLViewSnapshotTests: XCTestCase {
 
         XCTAssertEqual(view.lastFrameWidth, 123)
         XCTAssertEqual(view.lastFrameHeight, 45)
+    }
+
+    func testRenderImageFallbackHandlesRGBCVAndUnsupportedFrames() throws {
+        let view = IRGLView(frame: CGRect(x: 0, y: 0, width: 12, height: 8))
+        let rgbFrame = IRVideoFrameRGB(linesize: 3, rgb: Data([0xff, 0, 0]))
+        rgbFrame.width = 1
+        rgbFrame.height = 1
+        let cvFrame = IRFFCVYUVVideoFrame(pixelBuffer: try makePixelBuffer(width: 2, height: 3))
+        let unsupportedFrame = IRFFVideoFrame()
+        unsupportedFrame.width = 4
+        unsupportedFrame.height = 5
+
+        view.send(videoFrame: rgbFrame)
+        XCTAssertEqual(view.lastFrameWidth, 1)
+        XCTAssertEqual(view.lastFrameHeight, 1)
+
+        view.send(videoFrame: cvFrame)
+        XCTAssertEqual(view.lastFrameWidth, 2)
+        XCTAssertEqual(view.lastFrameHeight, 3)
+
+        view.send(videoFrame: unsupportedFrame)
+        XCTAssertEqual(view.lastFrameWidth, 4)
+        XCTAssertEqual(view.lastFrameHeight, 5)
     }
 
     func testRendererCleanupBranchesRemainCallable() {
@@ -177,6 +214,21 @@ final class IRGLViewSnapshotTests: XCTestCase {
         view.scroll(byDx: -500, dy: 0)
         XCTAssertEqual(params.offsetX, 100, accuracy: 0.0001)
         XCTAssertEqual(transformController.linearScrolls.map { "\($0.dx),\($0.dy)" }, ["500.0,0.0", "-500.0,0.0"])
+    }
+
+    func testFisheyeModeWithoutProgramUsesFallbackControllerForGestures() {
+        let view = IRGLView(frame: CGRect(x: 0, y: 0, width: 80, height: 40))
+        let mode = NilProgramFisheyeRenderMode()
+
+        view.setRenderModes([mode])
+        XCTAssertTrue(view.choose(renderMode: mode, withImmediatelyRenderOnce: false))
+        XCTAssertNil(mode.program)
+
+        view.updateScope(byFx: 10, fy: 20, dsx: 1.25, dsy: 1.5)
+        view.scroll(byDx: 3, dy: -4)
+        view.scroll(byDegreeX: 5, degreeY: -6)
+
+        XCTAssertTrue(view.getCurrentRenderMode() === mode)
     }
 
     func testRenderModeSelectionRequiresRegisteredMode() {
@@ -417,6 +469,38 @@ final class IRGLViewSnapshotTests: XCTestCase {
                                           targetRect: CGRect(x: 0, y: 0, width: CGFloat.nan, height: 100),
                                           contentMode: .scaleAspectFit)
         )
+    }
+
+    private func makePixelBuffer(width: Int,
+                                 height: Int,
+                                 format: OSType = kCVPixelFormatType_32BGRA) throws -> CVPixelBuffer {
+        var pixelBuffer: CVPixelBuffer?
+        let status = CVPixelBufferCreate(
+            kCFAllocatorDefault,
+            width,
+            height,
+            format,
+            [kCVPixelBufferIOSurfacePropertiesKey as String: [:]] as CFDictionary,
+            &pixelBuffer
+        )
+        guard status == kCVReturnSuccess, let pixelBuffer else {
+            throw XCTSkip("CVPixelBuffer unavailable: \(status)")
+        }
+        return pixelBuffer
+    }
+}
+
+private final class NilProgramFisheyeRenderMode: IRGLRenderMode3DFisheye {
+    override var programFactory: IRGLProgram2DFactory {
+        NilProgramFactory()
+    }
+}
+
+private final class NilProgramFactory: IRGLProgram2DFactory {
+    override func createIRGLProgram(pixelFormat: IRPixelFormat,
+                                    viewportRange: CGRect,
+                                    parameter: IRMediaParameter?) -> IRGLProgram2D? {
+        nil
     }
 }
 
