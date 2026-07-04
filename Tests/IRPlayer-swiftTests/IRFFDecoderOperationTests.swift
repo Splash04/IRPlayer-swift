@@ -253,6 +253,91 @@ final class IRFFDecoderOperationTests: XCTestCase {
         XCTAssertTrue(delegate.errors.isEmpty)
     }
 
+    func testOpenGeneratedVideoFileDisplaysSourceDecodedFrame() throws {
+        let url = try makeTinyVideoFile()
+        addTeardownBlock {
+            try? FileManager.default.removeItem(at: url)
+        }
+        let delegate = DecoderDelegateSpy()
+        let output = DecoderVideoOutputSpy()
+        let sourceFrame = IRFFVideoFrame()
+        sourceFrame.position = 0.03
+        sourceFrame.duration = 0.02
+        sourceFrame.size = 12
+        let source = DecoderVideoDataSourceSpy(shouldHandle: true, frame: sourceFrame)
+        let prepared = expectation(description: "decoder prepared")
+        let endOfFile = expectation(description: "decoder reached EOF")
+        let displayed = expectation(description: "decoder displayed source frame")
+        delegate.onPrepared = { prepared.fulfill() }
+        delegate.onEndOfFile = { endOfFile.fulfill() }
+        output.onFirstFrame = { displayed.fulfill() }
+
+        let decoder = IRFFDecoder(
+            contentURL: url,
+            videoFormat: .mpeg4,
+            videoOutput: output,
+            audioOutput: nil
+        )
+        decoder.delegate = delegate
+        decoder.source = source
+        decoder.hardwareDecoderEnable = false
+        addTeardownBlock {
+            decoder.closeFile()
+        }
+
+        decoder.open()
+
+        wait(for: [prepared, displayed, endOfFile], timeout: 5)
+
+        XCTAssertNil(decoder.error)
+        XCTAssertTrue(decoder.videoEnable)
+        XCTAssertFalse(decoder.audioEnable)
+        XCTAssertFalse(output.receivedFrames.isEmpty)
+        XCTAssertTrue(output.receivedFrames.contains { $0 === sourceFrame })
+        XCTAssertGreaterThanOrEqual(source.shouldHandleCallCount, 1)
+        XCTAssertGreaterThanOrEqual(source.decodeFrameCallCount, 1)
+        XCTAssertTrue(delegate.errors.isEmpty)
+    }
+
+    func testOpenGeneratedAudioFileReadsAndFetchesAudioFrame() throws {
+        let url = try makeTinyPCM16WAVFile()
+        addTeardownBlock {
+            try? FileManager.default.removeItem(at: url)
+        }
+        let delegate = DecoderDelegateSpy()
+        let audioOutput = DecoderAudioOutputSpy(numberOfChannels: 2, samplingRate: 48_000)
+        let prepared = expectation(description: "audio decoder prepared")
+        let endOfFile = expectation(description: "audio decoder reached EOF")
+        delegate.onPrepared = { prepared.fulfill() }
+        delegate.onEndOfFile = { endOfFile.fulfill() }
+
+        let decoder = IRFFDecoder(
+            contentURL: url,
+            videoFormat: .mpeg4,
+            videoOutput: nil,
+            audioOutput: audioOutput
+        )
+        decoder.delegate = delegate
+        addTeardownBlock {
+            decoder.closeFile()
+        }
+
+        decoder.open()
+
+        wait(for: [prepared, endOfFile], timeout: 5)
+
+        XCTAssertNil(decoder.error)
+        XCTAssertTrue(decoder.audioEnable)
+        XCTAssertFalse(decoder.videoEnable)
+        XCTAssertEqual(decoder.audioTrack?.type, .audio)
+        XCTAssertTrue(delegate.bufferedDurations.contains { $0 > 0 })
+
+        let frame: IRFFAudioFrame = try XCTUnwrap(decoder.fetchAudioFrame())
+        XCTAssertGreaterThan(frame.duration, 0)
+        XCTAssertEqual(decoder.audioTimeClock, frame.position)
+        XCTAssertTrue(delegate.errors.isEmpty)
+    }
+
     func testPauseResumeAndUnseekableSeekUpdateObservableState() {
         let decoder = makeDecoder()
         var seekResult: Bool?
@@ -535,6 +620,18 @@ private final class DecoderAudioOutputSpy: IRFFDecoderAudioOutput {
     init(numberOfChannels: UInt32, samplingRate: Float64) {
         self.numberOfChannels = numberOfChannels
         self.samplingRate = samplingRate
+    }
+}
+
+private final class DecoderVideoOutputSpy: NSObject, IRFFDecoderVideoOutput {
+    private(set) var receivedFrames: [IRFFVideoFrame] = []
+    var onFirstFrame: (() -> Void)?
+
+    func send(videoFrame frame: IRFFVideoFrame) {
+        receivedFrames.append(frame)
+        if receivedFrames.count == 1 {
+            onFirstFrame?()
+        }
     }
 }
 
