@@ -43,6 +43,20 @@ func mirroredFFPlayer(from player: IRPlayerImp) -> IRFFPlayer? {
     return childValue as? IRFFPlayer
 }
 
+func mirroredAVPlayer(from player: IRPlayerImp) -> IRAVPlayer? {
+    let childValue = Mirror(reflecting: player)
+        .children
+        .first { $0.label == "_avPlayer" }?
+        .value
+    guard let childValue = childValue else { return nil }
+
+    let optionalMirror = Mirror(reflecting: childValue)
+    if optionalMirror.displayStyle == .optional {
+        return optionalMirror.children.first?.value as? IRAVPlayer
+    }
+    return childValue as? IRAVPlayer
+}
+
 func captureStandardOutput(_ body: () -> Void) -> String {
     let pipe = Pipe()
     let originalStdout = dup(STDOUT_FILENO)

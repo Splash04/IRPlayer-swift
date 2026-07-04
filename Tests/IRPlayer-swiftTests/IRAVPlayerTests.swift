@@ -757,6 +757,61 @@ final class IRAVPlayerTests: XCTestCase {
         withExtendedLifetime(player) {}
     }
 
+    func testGeneratedNormalVideoConfiguresTracksAndPlaybackControls() throws {
+        let url = try makeTinyVideoFile()
+        addTeardownBlock {
+            try? FileManager.default.removeItem(at: url)
+        }
+        let player = IRPlayerImp.player()
+        player.manager = nil
+        player.decoder = IRPlayerDecoder.AVPlayerDecoder()
+        let displayView = try XCTUnwrap(player.view as? IRGLView)
+
+        player.replaceVideoWithURL(contentURL: url as NSURL, videoType: .normal)
+
+        let avPlayer = try XCTUnwrap(mirroredAVPlayer(from: player))
+        let item = try XCTUnwrap(avPlayer.avPlayerItem)
+        waitUntilReadyToPlay(item)
+        avPlayer.observeValue(forKeyPath: "status", of: item, change: nil, context: nil)
+
+        XCTAssertEqual(displayView.rendererType, .AVPlayerLayer)
+        XCTAssertEqual(avPlayer.state, .readyToPlay)
+        XCTAssertTrue(avPlayer.videoEnable)
+        XCTAssertFalse(avPlayer.audioEnable)
+        XCTAssertEqual(avPlayer.videoTracks.count, 1)
+        XCTAssertGreaterThan(avPlayer.videoTracks.first?.index ?? 0, 0)
+        XCTAssertTrue(avPlayer.audioTracks.isEmpty)
+        XCTAssertEqual(avPlayer.presentationSize, CGSize(width: 16, height: 16))
+        XCTAssertGreaterThan(avPlayer.duration, 0)
+        XCTAssertGreaterThanOrEqual(avPlayer.bitrate, 0)
+
+        avPlayer.play()
+        XCTAssertEqual(avPlayer.state, .playing)
+
+        avPlayer.setPlayIfNeeded()
+        XCTAssertEqual(avPlayer.state, .buffering)
+        XCTAssertTrue(avPlayer.needPlay)
+
+        avPlayer.playIfNeeded()
+        XCTAssertEqual(avPlayer.state, .playing)
+        XCTAssertFalse(avPlayer.needPlay)
+
+        let seekFinished = expectation(description: "seek finished")
+        avPlayer.seek(to: 0) { finished in
+            XCTAssertTrue(finished)
+            seekFinished.fulfill()
+        }
+        wait(for: [seekFinished], timeout: 2)
+        XCTAssertFalse(avPlayer.seeking)
+        XCTAssertEqual(avPlayer.state, .playing)
+
+        XCTAssertNotNil(avPlayer.snapshotAtCurrentTime())
+
+        avPlayer.pause()
+        XCTAssertEqual(avPlayer.state, .suspend)
+        withExtendedLifetime(player) {}
+    }
+
     func testReplaceVideoWithCustomAndFisheyeURLsLeaveRendererUnconfigured() throws {
         let player = IRPlayerImp.player()
         player.manager = nil
@@ -819,6 +874,30 @@ final class IRAVPlayerTests: XCTestCase {
 
     private func missingMediaURL(named name: String = "missing.mp4") -> URL {
         URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(name)
+    }
+
+    private func waitUntilReadyToPlay(_ item: AVPlayerItem) {
+        let ready = expectation(description: "AVPlayerItem ready")
+        var didFulfill = false
+        var observation: NSKeyValueObservation?
+        observation = item.observe(\.status, options: [.initial, .new]) { item, _ in
+            guard !didFulfill else { return }
+            switch item.status {
+            case .readyToPlay:
+                didFulfill = true
+                ready.fulfill()
+            case .failed:
+                didFulfill = true
+                XCTFail("AVPlayerItem failed: \(String(describing: item.error))")
+                ready.fulfill()
+            case .unknown:
+                break
+            @unknown default:
+                break
+            }
+        }
+        wait(for: [ready], timeout: 10)
+        observation?.invalidate()
     }
 
     private func observeNotification(
