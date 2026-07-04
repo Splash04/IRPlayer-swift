@@ -293,6 +293,52 @@ final class IRFFAudioDecoderTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(delegate.samplingRateRequestCount, 1)
         XCTAssertGreaterThanOrEqual(delegate.channelCountRequestCount, 1)
     }
+
+    func testPutPacketDecodesGeneratedPCM16AudioFrame() throws {
+        let url = try makeTinyPCM16WAVFile()
+        addTeardownBlock {
+            try? FileManager.default.removeItem(at: url)
+        }
+        let context = IRFFFormatContext(contentURL: url, videoFormat: .mpeg4)
+        addTeardownBlock {
+            context.destroy()
+        }
+        context.setupSync()
+
+        XCTAssertNil(context.error)
+        XCTAssertTrue(context.audioEnable)
+        XCTAssertFalse(context.audioTracks.isEmpty)
+        XCTAssertNotNil(context.audioCodecContext)
+
+        let codecContext = try XCTUnwrap(context.audioCodecContext)
+        let delegate = AudioDecoderDelegateSpy(samplingRate: 48_000, channelCount: 2)
+        let decoder = IRFFAudioDecoder.decoder(
+            codecContext: codecContext,
+            timebase: context.audioTimebase,
+            delegate: delegate
+        )
+
+        var decodedFrame: IRFFAudioFrame?
+        let audioTrackIndex = try XCTUnwrap(context.audioTrack?.index)
+        for _ in 0..<32 where decodedFrame == nil {
+            var packet = AVPacket()
+            guard context.readFrame(&packet) >= 0 else { break }
+            guard packet.stream_index == audioTrackIndex else { continue }
+
+            XCTAssertEqual(decoder.putPacket(packet), 0)
+            if !decoder.isEmpty() {
+                decodedFrame = decoder.getFrameSync()
+            }
+        }
+
+        let frame = try XCTUnwrap(decodedFrame)
+        XCTAssertGreaterThan(frame.duration, 0)
+        XCTAssertGreaterThan(frame.size, 0)
+        XCTAssertEqual(decoder.size(), 0)
+
+        decoder.flush()
+        XCTAssertTrue(decoder.isEmpty())
+    }
 }
 
 private final class AudioDecoderDelegateSpy: IRFFAudioDecoderDelegate {
@@ -314,5 +360,58 @@ private final class AudioDecoderDelegateSpy: IRFFAudioDecoderDelegate {
     func audioDecoder(_ audioDecoder: IRFFAudioDecoder, channelCount: inout UInt32) {
         channelCountRequestCount += 1
         channelCount = self.channelCount
+    }
+}
+
+private func makeTinyPCM16WAVFile() throws -> URL {
+    let url = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appendingPathComponent("irff-audio-decoder-\(UUID().uuidString).wav")
+    try? FileManager.default.removeItem(at: url)
+
+    let channelCount: UInt16 = 2
+    let sampleRate: UInt32 = 48_000
+    let bitsPerSample: UInt16 = 16
+    let frameCount = 2_048
+    let blockAlign = channelCount * bitsPerSample / 8
+    let byteRate = sampleRate * UInt32(blockAlign)
+    var samples = Data()
+    samples.reserveCapacity(frameCount * Int(blockAlign))
+    for frame in 0..<frameCount {
+        let left = Int16((frame % 128) * 128)
+        let right = Int16(-left)
+        samples.appendLittleEndian(left)
+        samples.appendLittleEndian(right)
+    }
+
+    var data = Data()
+    data.appendASCII("RIFF")
+    data.appendLittleEndian(UInt32(36 + samples.count))
+    data.appendASCII("WAVE")
+    data.appendASCII("fmt ")
+    data.appendLittleEndian(UInt32(16))
+    data.appendLittleEndian(UInt16(1))
+    data.appendLittleEndian(channelCount)
+    data.appendLittleEndian(sampleRate)
+    data.appendLittleEndian(byteRate)
+    data.appendLittleEndian(blockAlign)
+    data.appendLittleEndian(bitsPerSample)
+    data.appendASCII("data")
+    data.appendLittleEndian(UInt32(samples.count))
+    data.append(samples)
+
+    try data.write(to: url, options: .atomic)
+    return url
+}
+
+private extension Data {
+    mutating func appendASCII(_ string: String) {
+        append(contentsOf: string.utf8)
+    }
+
+    mutating func appendLittleEndian<T: FixedWidthInteger>(_ value: T) {
+        var littleEndianValue = value.littleEndian
+        Swift.withUnsafeBytes(of: &littleEndianValue) { bytes in
+            append(contentsOf: bytes)
+        }
     }
 }

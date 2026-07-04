@@ -309,6 +309,47 @@ final class IRFFVideoDecoderTests: XCTestCase {
         XCTAssertTrue(delegate.errors.isEmpty)
     }
 
+    func testDecodeFrameThreadUsesSourceFrameBeforeFinishingAtEndOfFile() {
+        var codecContext = AVCodecContext()
+        let delegate = VideoDecoderDelegateSpy()
+        let sourceFrame = IRFFVideoFrame()
+        sourceFrame.duration = 0.5
+        sourceFrame.size = 12
+        let source = VideoDecoderDataSourceSpy(shouldHandle: true, frame: sourceFrame)
+
+        withUnsafeMutablePointer(to: &codecContext) { codecContextPointer in
+            let decoder = IRFFVideoDecoder(
+                codecContext: codecContextPointer,
+                timebase: 0.25,
+                fps: 30,
+                delegate: delegate
+            )
+            decoder.source = source
+            decoder.endOfFile = true
+
+            var packet = AVPacket()
+            packet.stream_index = 0
+            packet.duration = 1
+            packet.size = 1
+            var byte: UInt8 = 1
+            withUnsafeMutablePointer(to: &byte) { pointer in
+                packet.data = pointer
+                decoder.putPacket(packet)
+                decoder.decodeFrameThread()
+            }
+
+            XCTAssertFalse(decoder.decoding)
+            XCTAssertTrue(decoder.getFrameAsync() === sourceFrame)
+            XCTAssertTrue(decoder.frameEmpty())
+        }
+
+        XCTAssertEqual(source.shouldHandleCallCount, 1)
+        XCTAssertEqual(source.decodeFrameCallCount, 1)
+        XCTAssertEqual(delegate.bufferedDurationUpdateCallCount, 1)
+        XCTAssertEqual(delegate.bufferingCheckCallCount, 1)
+        XCTAssertTrue(delegate.errors.isEmpty)
+    }
+
     func testReleaseDoesNotPrintDebugOutput() {
         var codecContext = AVCodecContext()
 
@@ -345,5 +386,27 @@ private final class VideoDecoderDelegateSpy: IRFFVideoDecoderDelegate {
 
     func videoDecoderNeedCheckBufferingStatus(_ videoDecoder: IRFFVideoDecoder) {
         bufferingCheckCallCount += 1
+    }
+}
+
+private final class VideoDecoderDataSourceSpy: IRFFVideoDecoderDataSource {
+    private let shouldHandleResult: Bool
+    private let frame: IRFFVideoFrame?
+    private(set) var shouldHandleCallCount = 0
+    private(set) var decodeFrameCallCount = 0
+
+    init(shouldHandle: Bool, frame: IRFFVideoFrame?) {
+        self.shouldHandleResult = shouldHandle
+        self.frame = frame
+    }
+
+    func shouldHandle(_ videoDecoder: IRFFVideoDecoderInfo, decodeFrame packet: AVPacket) -> Bool {
+        shouldHandleCallCount += 1
+        return shouldHandleResult
+    }
+
+    func videoDecoder(_ videoDecoder: IRFFVideoDecoderInfo, decodeFrame packet: AVPacket) -> IRFFVideoFrame? {
+        decodeFrameCallCount += 1
+        return frame
     }
 }
