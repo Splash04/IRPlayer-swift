@@ -1,4 +1,7 @@
 import CoreVideo
+import Metal
+import QuartzCore
+import simd
 import UIKit
 import XCTest
 @testable import IRPlayer_swift
@@ -105,6 +108,126 @@ final class IRGLViewSnapshotTests: XCTestCase {
         view.send(videoFrame: unsupportedFrame)
         XCTAssertEqual(view.lastFrameWidth, 4)
         XCTAssertEqual(view.lastFrameHeight, 5)
+    }
+
+    func testRenderRoutesFrameThroughSelected2DRenderer() {
+        let view = IRGLView(frame: CGRect(x: 0, y: 0, width: 12, height: 8))
+        let mode = IRGLRenderMode2D()
+        let renderer = ViewRenderRecorder()
+        let frame = makeRGBFrame()
+        view.setRenderModes([mode])
+        mode.renderer = renderer
+
+        view.send(videoFrame: frame)
+
+        XCTAssertEqual(renderer.renderCallCount, 1)
+        XCTAssertTrue(renderer.lastFrame === frame)
+    }
+
+    func testRenderRoutesFlatMultiFrameThroughRenderer() {
+        let view = IRGLView(frame: CGRect(x: 0, y: 0, width: 12, height: 8))
+        let mode = ViewFlatMultiRenderMode()
+        let renderer = ViewRenderRecorder()
+        view.setRenderModes([mode])
+        mode.renderer = renderer
+        let params = try XCTUnwrap((mode.program as? IRGLProgram2DFisheye2Pano)?.metalFish2PanoParams)
+
+        view.send(videoFrame: makeRGBFrame())
+
+        XCTAssertEqual(renderer.renderMultiCallCount, 1)
+        XCTAssertEqual(renderer.lastViewportCount, 4)
+    }
+
+    func testRenderRoutesMulti4PFisheyeFrameThroughRenderer() {
+        let view = IRGLView(frame: CGRect(x: 0, y: 0, width: 12, height: 8))
+        let mode = IRGLRenderModeMulti4P()
+        let renderer = ViewRenderRecorder()
+        mode.parameter = makeFisheyeParameter()
+        view.setRenderModes([mode])
+        mode.renderer = renderer
+
+        view.send(videoFrame: makeRGBFrame())
+
+        XCTAssertEqual(renderer.renderFisheyeMultiCallCount, 1)
+        XCTAssertEqual(renderer.lastMVPCount, 4)
+        XCTAssertEqual(renderer.lastViewportCount, 4)
+    }
+
+    func testRenderRoutesDistortionFrameThroughRenderer() {
+        let view = IRGLView(frame: CGRect(x: 0, y: 0, width: 12, height: 8))
+        let mode = IRGLRenderModeDistortion()
+        let renderer = ViewRenderRecorder()
+        view.setRenderModes([mode])
+        mode.renderer = renderer
+
+        view.send(videoFrame: makeRGBFrame())
+
+        XCTAssertEqual(renderer.renderDistortionCallCount, 1)
+    }
+
+    func testRenderRoutesFisheyeFrameThroughRenderer() {
+        let view = IRGLView(frame: CGRect(x: 0, y: 0, width: 12, height: 8))
+        let mode = IRGLRenderMode3DFisheye()
+        let renderer = ViewRenderRecorder()
+        mode.parameter = makeFisheyeParameter()
+        view.setRenderModes([mode])
+        mode.renderer = renderer
+
+        view.send(videoFrame: makeRGBFrame())
+
+        XCTAssertEqual(renderer.renderFisheyeCallCount, 1)
+    }
+
+    func testRenderRoutesVRFrameThroughRenderer() {
+        let view = IRGLView(frame: CGRect(x: 0, y: 0, width: 12, height: 8))
+        let mode = IRGLRenderModeVR()
+        let renderer = ViewRenderRecorder()
+        view.setRenderModes([mode])
+        mode.renderer = renderer
+
+        view.send(videoFrame: makeRGBFrame())
+
+        XCTAssertEqual(renderer.renderFisheyeCallCount, 1)
+    }
+
+    func testRenderClearsFish2PanoUntilLookupTexturesAreReady() throws {
+        let view = IRGLView(frame: CGRect(x: 0, y: 0, width: 12, height: 8))
+        let mode = IRGLRenderMode2DFisheye2Pano()
+        let renderer = ViewRenderRecorder()
+        view.setRenderModes([mode])
+        mode.renderer = renderer
+        let params = try XCTUnwrap((mode.program as? IRGLProgram2DFisheye2Pano)?.metalFish2PanoParams)
+        params.outputWidth = 4
+        params.outputHeight = 2
+        params.antialias = 1
+
+        view.send(videoFrame: IRFFVideoFrame())
+
+        XCTAssertEqual(renderer.renderClearCallCount, 1)
+        XCTAssertEqual(renderer.renderFish2PanoCallCount, 0)
+    }
+
+    func testRenderUploadsFish2PanoLookupTextureWhenPixelMapIsReady() throws {
+        let view = IRGLView(frame: CGRect(x: 0, y: 0, width: 12, height: 8))
+        let mode = IRGLRenderMode2DFisheye2Pano()
+        let renderer = ViewRenderRecorder()
+        view.setRenderModes([mode])
+        mode.renderer = renderer
+
+        view.send(videoFrame: makeRGBFrame())
+        let deadline = Date().addingTimeInterval(2)
+        var renderAttempts = 1
+        while renderer.renderFish2PanoCallCount == 0, Date() < deadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.01))
+            view.render(nil)
+            renderAttempts += 1
+        }
+
+        XCTAssertEqual(renderer.renderFish2PanoCallCount,
+                       1,
+                       "attempts=\(renderAttempts) clears=\(renderer.renderClearCallCount) texture=\(params.textureWidth)x\(params.textureHeight) output=\(params.outputWidth)x\(params.outputHeight)")
+        XCTAssertEqual(renderer.lastFish2PanoTextureCount, 1)
+        XCTAssertEqual(renderer.lastFish2PanoOutputSize, CGSize(width: 4, height: 2))
     }
 
     func testRendererCleanupBranchesRemainCallable() {
@@ -488,6 +611,24 @@ final class IRGLViewSnapshotTests: XCTestCase {
         }
         return pixelBuffer
     }
+
+    private func makeRGBFrame() -> IRVideoFrameRGB {
+        let frame = IRVideoFrameRGB(linesize: 8, rgb: Data(repeating: 0xff, count: 16))
+        frame.width = 2
+        frame.height = 2
+        return frame
+    }
+
+    private func makeFisheyeParameter() -> IRFisheyeParameter {
+        IRFisheyeParameter(width: 2,
+                           height: 2,
+                           up: false,
+                           rx: 1,
+                           ry: 1,
+                           cx: 1,
+                           cy: 1,
+                           latmax: 90)
+    }
 }
 
 private final class NilProgramFisheyeRenderMode: IRGLRenderMode3DFisheye {
@@ -501,6 +642,25 @@ private final class NilProgramFactory: IRGLProgram2DFactory {
                                     viewportRange: CGRect,
                                     parameter: IRMediaParameter?) -> IRGLProgram2D? {
         nil
+    }
+}
+
+private final class ViewFlatMultiRenderMode: IRGLRenderModeMulti4P {
+    override var programFactory: IRGLProgram2DFactory {
+        ViewFlatMultiProgramFactory()
+    }
+}
+
+private final class ViewFlatMultiProgramFactory: IRGLProgram2DFactory {
+    override func createIRGLProgram(pixelFormat: IRPixelFormat,
+                                    viewportRange: CGRect,
+                                    parameter: IRMediaParameter?) -> IRGLProgram2D? {
+        let programs = (0..<4).map { _ in
+            IRGLProgram2D(pixelFormat: pixelFormat,
+                          viewportRange: viewportRange,
+                          parameter: parameter)
+        }
+        return IRGLProgramMulti4P(programs: programs, viewprotRange: viewportRange)
     }
 }
 
@@ -529,5 +689,103 @@ private final class ViewRecordingTransformController: IRGLTransformController {
 
     override func update(fx: Float, fy: Float, sx: Float, sy: Float) {
         updates.append((fx, fy, sx, sy))
+    }
+}
+
+private final class ViewRenderRecorder: IRGLRenderInternal {
+    private(set) var renderCallCount = 0
+    private(set) var renderMultiCallCount = 0
+    private(set) var renderClearCallCount = 0
+    private(set) var renderFish2PanoCallCount = 0
+    private(set) var renderDistortionCallCount = 0
+    private(set) var renderFisheyeCallCount = 0
+    private(set) var renderFisheyeMultiCallCount = 0
+    private(set) var lastFish2PanoTextureCount = 0
+    private(set) var lastFish2PanoOutputSize = CGSize.zero
+    private(set) var lastMVPCount = 0
+    private(set) var lastViewportCount = 0
+    private(set) var lastFrame: IRFFVideoFrame?
+
+    func render(frame: IRFFVideoFrame,
+                to drawable: CAMetalDrawable,
+                contentMode: IRGLRenderContentMode,
+                drawableSize: CGSize,
+                zoomScale: Float,
+                translation: SIMD2<Float>) -> Bool {
+        renderCallCount += 1
+        lastFrame = frame
+        return true
+    }
+
+    func renderMulti(frame: IRFFVideoFrame,
+                     to drawable: CAMetalDrawable,
+                     drawableSize: CGSize,
+                     viewports: [CGRect],
+                     contentModes: [IRGLRenderContentMode],
+                     zoomScales: [Float],
+                     translations: [SIMD2<Float>]) -> Bool {
+        renderMultiCallCount += 1
+        lastFrame = frame
+        lastViewportCount = viewports.count
+        return true
+    }
+
+    func renderClear(to drawable: CAMetalDrawable) {
+        renderClearCallCount += 1
+    }
+
+    func renderFish2Pano(frame: IRFFVideoFrame,
+                         params: IRMetalRenderer.Fish2PanoParams,
+                         texUVTextures: [MTLTexture],
+                         to drawable: CAMetalDrawable,
+                         drawableSize: CGSize,
+                         viewport: CGRect,
+                         contentMode: IRGLRenderContentMode,
+                         outputSize: CGSize,
+                         zoomScale: Float,
+                         translation: SIMD2<Float>) -> Bool {
+        renderFish2PanoCallCount += 1
+        lastFrame = frame
+        lastFish2PanoTextureCount = texUVTextures.count
+        lastFish2PanoOutputSize = outputSize
+        return true
+    }
+
+    func renderDistortion(frame: IRFFVideoFrame,
+                          leftMesh: IRMetalDistortionMesh,
+                          rightMesh: IRMetalDistortionMesh,
+                          to drawable: CAMetalDrawable,
+                          drawableSize: CGSize,
+                          contentMode: IRGLRenderContentMode) -> Bool {
+        renderDistortionCallCount += 1
+        lastFrame = frame
+        return true
+    }
+
+    func renderFisheye(frame: IRFFVideoFrame,
+                       mesh: IRMetalFisheyeMesh,
+                       mvp: simd_float4x4,
+                       textureMatrix: simd_float4x4,
+                       to drawable: CAMetalDrawable,
+                       drawableSize: CGSize,
+                       viewport: CGRect) -> Bool {
+        renderFisheyeCallCount += 1
+        lastFrame = frame
+        lastViewportCount = 1
+        return true
+    }
+
+    func renderFisheyeMulti(frame: IRFFVideoFrame,
+                            mesh: IRMetalFisheyeMesh,
+                            mvpList: [simd_float4x4],
+                            textureMatrix: simd_float4x4,
+                            to drawable: CAMetalDrawable,
+                            drawableSize: CGSize,
+                            viewports: [CGRect]) -> Bool {
+        renderFisheyeMultiCallCount += 1
+        lastFrame = frame
+        lastMVPCount = mvpList.count
+        lastViewportCount = viewports.count
+        return true
     }
 }

@@ -7,6 +7,7 @@
 
 import Metal
 import CoreVideo
+import simd
 import XCTest
 @testable import IRPlayer_swift
 
@@ -117,6 +118,24 @@ final class IRMetalRendererPixelFormatTests: XCTestCase {
         return buffer
     }
 
+    private func makeFisheyeMesh(renderer: IRMetalRenderer) throws -> IRMetalFisheyeMesh {
+        let mesh = IRMetalFisheyeMesh(
+            device: renderer.device,
+            positions: [
+                SIMD3<Float>(-1, -1, 0),
+                SIMD3<Float>(1, -1, 0),
+                SIMD3<Float>(0, 1, 0)
+            ],
+            texcoords: [
+                SIMD2<Float>(0, 0),
+                SIMD2<Float>(1, 0),
+                SIMD2<Float>(0.5, 1)
+            ],
+            indices: [0, 1, 2]
+        )
+        return try XCTUnwrap(mesh)
+    }
+
     private func makeFish2PanoParams() -> IRMetalRenderer.Fish2PanoParams {
         return IRMetalRenderer.Fish2PanoParams(
             fishwidth: 2,
@@ -126,6 +145,10 @@ final class IRMetalRendererPixelFormatTests: XCTestCase {
             antialias: 1,
             offsetX: 0
         )
+    }
+
+    private func makeIdentityMatrix() -> simd_float4x4 {
+        return simd_float4x4(diagonal: SIMD4<Float>(repeating: 1))
     }
 
     private func makePixelBuffer(width: Int = 2,
@@ -174,6 +197,18 @@ final class IRMetalRendererPixelFormatTests: XCTestCase {
 
     func testRendererBuildsAllShaderPipelines() throws {
         let renderer = try makeRenderer()
+        guard renderer.pipelineNV12 != nil,
+              renderer.pipelineI420 != nil,
+              renderer.pipelineRGB != nil,
+              renderer.pipelineNV12Mesh != nil,
+              renderer.pipelineI420Mesh != nil,
+              renderer.pipelineRGBMesh != nil,
+              renderer.pipelineNV12Fish2Pano != nil,
+              renderer.pipelineI420Fish2Pano != nil,
+              renderer.pipelineRGBFish2Pano != nil,
+              renderer.pipelineDistortion != nil else {
+            throw XCTSkip("Metal shader pipelines unavailable")
+        }
 
         XCTAssertNotNil(renderer.pipelineNV12)
         XCTAssertNotNil(renderer.pipelineI420)
@@ -637,6 +672,50 @@ final class IRMetalRendererPixelFormatTests: XCTestCase {
                                                        indexCount: 3,
                                                        indexBuffer: indexBuffer))
             }
+        }
+    }
+
+    func testRenderFisheyeDrawsValidI420Frame() throws {
+        let renderer = try makeRenderer()
+        guard renderer.pipelineI420Mesh != nil else {
+            throw XCTSkip("I420 mesh Metal pipeline unavailable")
+        }
+        let mesh = try makeFisheyeMesh(renderer: renderer)
+        let drawable = try makeOffscreenDrawable(renderer: renderer, width: 4, height: 4)
+
+        withI420Frame { frame in
+            XCTAssertTrue(renderer.renderFisheye(frame: frame,
+                                                mesh: mesh,
+                                                mvp: makeIdentityMatrix(),
+                                                textureMatrix: makeIdentityMatrix(),
+                                                to: drawable,
+                                                drawableSize: CGSize(width: 4, height: 4),
+                                                viewport: CGRect(x: 0, y: 0, width: 4, height: 4)))
+        }
+    }
+
+    func testRenderFisheyeMultiDrawsValidI420FrameAcrossViewports() throws {
+        let renderer = try makeRenderer()
+        guard renderer.pipelineI420Mesh != nil else {
+            throw XCTSkip("I420 mesh Metal pipeline unavailable")
+        }
+        let mesh = try makeFisheyeMesh(renderer: renderer)
+        let drawable = try makeOffscreenDrawable(renderer: renderer, width: 4, height: 4)
+
+        withI420Frame { frame in
+            XCTAssertTrue(renderer.renderFisheyeMulti(frame: frame,
+                                                     mesh: mesh,
+                                                     mvpList: [
+                                                        makeIdentityMatrix(),
+                                                        makeIdentityMatrix()
+                                                     ],
+                                                     textureMatrix: makeIdentityMatrix(),
+                                                     to: drawable,
+                                                     drawableSize: CGSize(width: 4, height: 4),
+                                                     viewports: [
+                                                        CGRect(x: 0, y: 0, width: 2, height: 4),
+                                                        CGRect(x: 2, y: 0, width: 2, height: 4)
+                                                     ]))
         }
     }
 
