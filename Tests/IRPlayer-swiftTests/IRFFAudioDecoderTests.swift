@@ -262,4 +262,57 @@ final class IRFFAudioDecoderTests: XCTestCase {
         XCTAssertFalse(IRFFAudioDecoder.canUseDirectOutput(sampleFormat: AV_SAMPLE_FMT_FLT))
         XCTAssertFalse(IRFFAudioDecoder.canUseDirectOutput(sampleFormat: AV_SAMPLE_FMT_NONE))
     }
+
+    func testInstanceQueueLifecycleAndInvalidPacketRemainCallable() {
+        var codecContext = AVCodecContext()
+        let delegate = AudioDecoderDelegateSpy(samplingRate: 48_000, channelCount: 2)
+
+        withUnsafeMutablePointer(to: &codecContext) { codecContextPointer in
+            let decoder = IRFFAudioDecoder.decoder(
+                codecContext: codecContextPointer,
+                timebase: 0.001,
+                delegate: delegate
+            )
+
+            XCTAssertEqual(decoder.size(), 0)
+            XCTAssertTrue(decoder.isEmpty())
+            XCTAssertEqual(decoder.duration(), 0)
+
+            let packet = AVPacket()
+            XCTAssertEqual(decoder.putPacket(packet), 0)
+
+            XCTAssertEqual(decoder.size(), 0)
+            XCTAssertTrue(decoder.isEmpty())
+            XCTAssertEqual(decoder.duration(), 0)
+
+            decoder.destroy()
+
+            XCTAssertNil(decoder.getFrameSync())
+        }
+
+        XCTAssertGreaterThanOrEqual(delegate.samplingRateRequestCount, 1)
+        XCTAssertGreaterThanOrEqual(delegate.channelCountRequestCount, 1)
+    }
+}
+
+private final class AudioDecoderDelegateSpy: IRFFAudioDecoderDelegate {
+    private let samplingRate: Float64
+    private let channelCount: UInt32
+    private(set) var samplingRateRequestCount = 0
+    private(set) var channelCountRequestCount = 0
+
+    init(samplingRate: Float64, channelCount: UInt32) {
+        self.samplingRate = samplingRate
+        self.channelCount = channelCount
+    }
+
+    func audioDecoder(_ audioDecoder: IRFFAudioDecoder, samplingRate: inout Float64) {
+        samplingRateRequestCount += 1
+        samplingRate = self.samplingRate
+    }
+
+    func audioDecoder(_ audioDecoder: IRFFAudioDecoder, channelCount: inout UInt32) {
+        channelCountRequestCount += 1
+        channelCount = self.channelCount
+    }
 }
