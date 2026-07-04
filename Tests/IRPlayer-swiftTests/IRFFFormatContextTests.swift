@@ -335,7 +335,7 @@ final class IRFFFormatContextTests: XCTestCase {
     }
 }
 
-private func makeTinyVideoFile() throws -> URL {
+func makeTinyVideoFile() throws -> URL {
     let url = URL(fileURLWithPath: NSTemporaryDirectory())
         .appendingPathComponent("irff-format-context-\(UUID().uuidString).mp4")
     try? FileManager.default.removeItem(at: url)

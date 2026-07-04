@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 import IRFFMpeg
 import XCTest
@@ -206,6 +207,50 @@ final class IRFFDecoderOperationTests: XCTestCase {
         XCTAssertEqual(decoder.duration, 0)
         XCTAssertEqual(decoder.bitrate, 0)
         XCTAssertFalse(decoder.seekEnable)
+    }
+
+    func testOpenGeneratedVideoFilePreparesAndReadsToEndOfFile() throws {
+        let url = try makeTinyVideoFile()
+        addTeardownBlock {
+            try? FileManager.default.removeItem(at: url)
+        }
+        let delegate = DecoderDelegateSpy()
+        let prepared = expectation(description: "decoder prepared")
+        let endOfFile = expectation(description: "decoder reached EOF")
+        delegate.onPrepared = { prepared.fulfill() }
+        delegate.onEndOfFile = { endOfFile.fulfill() }
+
+        let decoder = IRFFDecoder(
+            contentURL: url,
+            videoFormat: .mpeg4,
+            videoOutput: nil,
+            audioOutput: nil
+        )
+        decoder.delegate = delegate
+        decoder.hardwareDecoderEnable = false
+        addTeardownBlock {
+            decoder.closeFile()
+        }
+
+        decoder.open()
+
+        wait(for: [prepared, endOfFile], timeout: 5)
+
+        XCTAssertNil(decoder.error)
+        XCTAssertTrue(decoder.prepareToDecode)
+        XCTAssertTrue(decoder.videoEnable)
+        XCTAssertFalse(decoder.audioEnable)
+        XCTAssertEqual(decoder.videoTrack?.type, .video)
+        XCTAssertEqual(decoder.videoTracks.map(\.type), [.video])
+        XCTAssertTrue(decoder.audioTracks.isEmpty)
+        XCTAssertEqual(decoder.presentationSize, CGSize(width: 16, height: 16))
+        XCTAssertEqual(decoder.aspect, 1, accuracy: 0.0001)
+        XCTAssertTrue(decoder.seekEnable)
+        XCTAssertTrue(decoder.endOfFile)
+        XCTAssertFalse(decoder.reading)
+        XCTAssertEqual(delegate.preparedCount, 1)
+        XCTAssertEqual(delegate.endOfFileCount, 1)
+        XCTAssertTrue(delegate.errors.isEmpty)
     }
 
     func testPauseResumeAndUnseekableSeekUpdateObservableState() {
@@ -440,6 +485,8 @@ private final class SeekableFFDecoder: IRFFDecoder {
 }
 
 private final class DecoderDelegateSpy: IRFFDecoderDelegate {
+    var onPrepared: (() -> Void)?
+    var onEndOfFile: (() -> Void)?
     private(set) var preparedCount = 0
     private(set) var endOfFileCount = 0
     private(set) var playbackFinishedCount = 0
@@ -452,10 +499,12 @@ private final class DecoderDelegateSpy: IRFFDecoderDelegate {
 
     func decoderDidPrepareToDecodeFrames(_ decoder: IRFFDecoder) {
         preparedCount += 1
+        onPrepared?()
     }
 
     func decoderDidEndOfFile(_ decoder: IRFFDecoder) {
         endOfFileCount += 1
+        onEndOfFile?()
     }
 
     func decoderDidPlaybackFinished(_ decoder: IRFFDecoder) {
