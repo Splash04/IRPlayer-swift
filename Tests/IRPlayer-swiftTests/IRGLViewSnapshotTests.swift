@@ -130,7 +130,6 @@ final class IRGLViewSnapshotTests: XCTestCase {
         let renderer = ViewRenderRecorder()
         view.setRenderModes([mode])
         mode.renderer = renderer
-        let params = try XCTUnwrap((mode.program as? IRGLProgram2DFisheye2Pano)?.metalFish2PanoParams)
 
         view.send(videoFrame: makeRGBFrame())
 
@@ -213,8 +212,12 @@ final class IRGLViewSnapshotTests: XCTestCase {
         let renderer = ViewRenderRecorder()
         view.setRenderModes([mode])
         mode.renderer = renderer
+        let params = try XCTUnwrap((mode.program as? IRGLProgram2DFisheye2Pano)?.metalFish2PanoParams)
+        let expectedOutputSize = try XCTUnwrap(
+            IRGLFish2PanoShaderParams.outputSize(forTextureWidth: 64, height: 48)
+        )
 
-        view.send(videoFrame: makeRGBFrame())
+        view.send(videoFrame: makeRGBFrame(width: 64, height: 48))
         let deadline = Date().addingTimeInterval(2)
         var renderAttempts = 1
         while renderer.renderFish2PanoCallCount == 0, Date() < deadline {
@@ -223,11 +226,14 @@ final class IRGLViewSnapshotTests: XCTestCase {
             renderAttempts += 1
         }
 
-        XCTAssertEqual(renderer.renderFish2PanoCallCount,
-                       1,
-                       "attempts=\(renderAttempts) clears=\(renderer.renderClearCallCount) texture=\(params.textureWidth)x\(params.textureHeight) output=\(params.outputWidth)x\(params.outputHeight)")
+        XCTAssertEqual(
+            renderer.renderFish2PanoCallCount,
+            1,
+            "attempts=\(renderAttempts) clears=\(renderer.renderClearCallCount) texture=\(params.textureWidth)x\(params.textureHeight) output=\(params.outputWidth)x\(params.outputHeight)"
+        )
         XCTAssertEqual(renderer.lastFish2PanoTextureCount, 1)
-        XCTAssertEqual(renderer.lastFish2PanoOutputSize, CGSize(width: 4, height: 2))
+        XCTAssertEqual(renderer.lastFish2PanoOutputSize,
+                       CGSize(width: expectedOutputSize.width, height: expectedOutputSize.height))
     }
 
     func testRendererCleanupBranchesRemainCallable() {
@@ -612,10 +618,12 @@ final class IRGLViewSnapshotTests: XCTestCase {
         return pixelBuffer
     }
 
-    private func makeRGBFrame() -> IRVideoFrameRGB {
-        let frame = IRVideoFrameRGB(linesize: 8, rgb: Data(repeating: 0xff, count: 16))
-        frame.width = 2
-        frame.height = 2
+    private func makeRGBFrame(width: Int = 2, height: Int = 2) -> IRVideoFrameRGB {
+        let bytesPerRow = width * 4
+        let frame = IRVideoFrameRGB(linesize: UInt(bytesPerRow),
+                                    rgb: Data(repeating: 0xff, count: bytesPerRow * height))
+        frame.width = width
+        frame.height = height
         return frame
     }
 
