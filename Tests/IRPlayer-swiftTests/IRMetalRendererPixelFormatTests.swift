@@ -172,6 +172,21 @@ final class IRMetalRendererPixelFormatTests: XCTestCase {
         }
     }
 
+    func testRendererBuildsAllShaderPipelines() throws {
+        let renderer = try makeRenderer()
+
+        XCTAssertNotNil(renderer.pipelineNV12)
+        XCTAssertNotNil(renderer.pipelineI420)
+        XCTAssertNotNil(renderer.pipelineRGB)
+        XCTAssertNotNil(renderer.pipelineNV12Mesh)
+        XCTAssertNotNil(renderer.pipelineI420Mesh)
+        XCTAssertNotNil(renderer.pipelineRGBMesh)
+        XCTAssertNotNil(renderer.pipelineNV12Fish2Pano)
+        XCTAssertNotNil(renderer.pipelineI420Fish2Pano)
+        XCTAssertNotNil(renderer.pipelineRGBFish2Pano)
+        XCTAssertNotNil(renderer.pipelineDistortion)
+    }
+
     func testRuntimeDebugOutputIsSilentByDefault() {
         XCTAssertFalse(IRMetalRuntimeDebugOutput.isEnabled)
 
