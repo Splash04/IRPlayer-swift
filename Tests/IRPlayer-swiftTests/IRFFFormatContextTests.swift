@@ -1,3 +1,5 @@
+import AVFoundation
+import CoreVideo
 import Foundation
 import IRFFMpeg
 import XCTest
@@ -220,6 +222,70 @@ final class IRFFFormatContextTests: XCTestCase {
         XCTAssertLessThan(context.readFrame(&packet), 0)
     }
 
+    func testDerivedFormatValuesUseDefaultsBeforeStreamIsOpened() {
+        let context = IRFFFormatContext(contentURL: URL(fileURLWithPath: "/tmp/missing.mp4"), videoFormat: .mpeg4)
+
+        XCTAssertEqual(context.bitrate, 0)
+        XCTAssertEqual(context.duration, 0)
+    }
+
+    func testSetupSyncOpensGeneratedVideoFileAndInitializesVideoTrack() throws {
+        let url = try makeTinyVideoFile()
+        addTeardownBlock {
+            try? FileManager.default.removeItem(at: url)
+        }
+        let context = IRFFFormatContext(contentURL: url, videoFormat: .mpeg4)
+        addTeardownBlock {
+            context.destroy()
+        }
+
+        context.setupSync()
+
+        XCTAssertNil(context.error)
+        XCTAssertTrue(context.videoEnable)
+        XCTAssertFalse(context.audioEnable)
+        XCTAssertEqual(context.videoTrack?.type, .video)
+        XCTAssertEqual(context.videoTracks.map(\.type), [.video])
+        XCTAssertTrue(context.audioTracks.isEmpty)
+        XCTAssertNotNil(context.videoCodecContext)
+        XCTAssertNil(context.audioCodecContext)
+        XCTAssertEqual(context.videoPresentationSize, CGSize(width: 16, height: 16))
+        XCTAssertEqual(context.videoAspect, 1, accuracy: 0.0001)
+        XCTAssertGreaterThan(context.videoTimebase, 0)
+        XCTAssertGreaterThan(context.videoFPS, 0)
+        XCTAssertGreaterThanOrEqual(context.duration, 0)
+
+        var packet = AVPacket()
+        XCTAssertGreaterThanOrEqual(context.readFrame(&packet), 0)
+
+        context.seekFile(withFFTimebase: 0)
+    }
+
+    func testContentURLStringUsesFilePathOrAbsoluteURL() {
+        let fileContext = IRFFFormatContext(
+            contentURL: URL(fileURLWithPath: "/tmp/sample movie.mp4"),
+            videoFormat: .mpeg4
+        )
+        let remoteContext = IRFFFormatContext(
+            contentURL: URL(string: "https://example.com/video.m3u8?token=abc")!,
+            videoFormat: .mpeg4
+        )
+
+        XCTAssertEqual(fileContext.contentURLString, "/tmp/sample movie.mp4")
+        XCTAssertEqual(remoteContext.contentURLString, "https://example.com/video.m3u8?token=abc")
+    }
+
+    func testSelectingMissingAudioTrackLeavesContextUnchanged() {
+        let context = IRFFFormatContext(contentURL: URL(fileURLWithPath: "/tmp/missing.mp4"), videoFormat: .mpeg4)
+
+        let result = context.selectAudioTrackIndexResult(0)
+
+        XCTAssertNil(result.error)
+        XCTAssertFalse(result.didChangeTrack)
+        XCTAssertFalse(context.containAudioTrack(0))
+        XCTAssertNil(context.selectAudioTrackIndex(0))
+    }
+
     func testDurationSecondsPreservesNoPTSBehavior() {
         XCTAssertEqual(IRFFFormatContext.durationSeconds(from: Int64.min), TimeInterval(MAXFLOAT))
     }
@@ -267,4 +333,88 @@ final class IRFFFormatContextTests: XCTestCase {
 
         XCTAssertEqual(output, "")
     }
+}
+
+func makeTinyVideoFile() throws -> URL {
+    let url = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appendingPathComponent("irff-format-context-\(UUID().uuidString).mp4")
+    try? FileManager.default.removeItem(at: url)
+
+    let writer: AVAssetWriter
+    do {
+        writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
+    } catch {
+        throw XCTSkip("AVAssetWriter unavailable: \(error)")
+    }
+
+    let input = AVAssetWriterInput(
+        mediaType: .video,
+        outputSettings: [
+            AVVideoCodecKey: AVVideoCodecType.h264,
+            AVVideoWidthKey: 16,
+            AVVideoHeightKey: 16
+        ]
+    )
+    input.expectsMediaDataInRealTime = false
+
+    let adaptor = AVAssetWriterInputPixelBufferAdaptor(
+        assetWriterInput: input,
+        sourcePixelBufferAttributes: [
+            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+            kCVPixelBufferWidthKey as String: 16,
+            kCVPixelBufferHeightKey as String: 16
+        ]
+    )
+
+    guard writer.canAdd(input) else {
+        throw XCTSkip("Cannot add video input to AVAssetWriter.")
+    }
+    writer.add(input)
+
+    guard writer.startWriting() else {
+        throw writer.error ?? NSError(domain: "IRFFFormatContextTests", code: 1)
+    }
+    writer.startSession(atSourceTime: .zero)
+
+    guard let pool = adaptor.pixelBufferPool else {
+        throw XCTSkip("AVAssetWriter did not provide a pixel buffer pool.")
+    }
+
+    for frameIndex in 0..<2 {
+        guard input.isReadyForMoreMediaData else {
+            throw XCTSkip("AVAssetWriter input was not ready for pixel buffers.")
+        }
+
+        var pixelBuffer: CVPixelBuffer?
+        let status = CVPixelBufferPoolCreatePixelBuffer(nil, pool, &pixelBuffer)
+        guard status == kCVReturnSuccess, let pixelBuffer else {
+            throw XCTSkip("Could not create pixel buffer: \(status).")
+        }
+
+        CVPixelBufferLockBaseAddress(pixelBuffer, [])
+        if let baseAddress = CVPixelBufferGetBaseAddress(pixelBuffer) {
+            memset(baseAddress, 0, CVPixelBufferGetBytesPerRow(pixelBuffer) * CVPixelBufferGetHeight(pixelBuffer))
+        }
+        CVPixelBufferUnlockBaseAddress(pixelBuffer, [])
+
+        let presentationTime = CMTime(value: CMTimeValue(frameIndex), timescale: 30)
+        guard adaptor.append(pixelBuffer, withPresentationTime: presentationTime) else {
+            throw writer.error ?? NSError(domain: "IRFFFormatContextTests", code: 2)
+        }
+    }
+
+    input.markAsFinished()
+
+    let semaphore = DispatchSemaphore(value: 0)
+    writer.finishWriting {
+        semaphore.signal()
+    }
+    guard semaphore.wait(timeout: .now() + 5) == .success else {
+        throw XCTSkip("Timed out while writing tiny video fixture.")
+    }
+    guard writer.status == .completed else {
+        throw writer.error ?? NSError(domain: "IRFFFormatContextTests", code: 3)
+    }
+
+    return url
 }

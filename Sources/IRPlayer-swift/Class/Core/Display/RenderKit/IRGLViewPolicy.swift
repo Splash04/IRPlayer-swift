@@ -75,4 +75,34 @@ enum IRGLViewPolicy {
 
         return (bytesPerRow: bytesPerRow, totalByteCount: totalByteCount)
     }
+
+    static func translationVector(for scope: IRGLScope2D?) -> SIMD2<Float> {
+        guard let scope,
+              scope.w > 0,
+              scope.h > 0,
+              scope.scaleX.isFinite,
+              scope.scaleY.isFinite,
+              scope.offsetX.isFinite,
+              scope.offsetY.isFinite,
+              scope.scaleX > 0,
+              scope.scaleY > 0 else {
+            return SIMD2<Float>(repeating: 0)
+        }
+
+        let tx: Float
+        if scope.scaleX >= 1.0 {
+            tx = (scope.offsetX * scope.scaleX * 2 / Float(scope.w)) + 1.0 - scope.scaleX
+        } else {
+            tx = 0
+        }
+
+        let ty: Float
+        if scope.scaleY >= 1.0 {
+            ty = -((scope.offsetY * scope.scaleY * 2 / Float(scope.h)) + 1.0 - scope.scaleY)
+        } else {
+            ty = 0
+        }
+
+        return SIMD2<Float>(tx, ty)
+    }
 }

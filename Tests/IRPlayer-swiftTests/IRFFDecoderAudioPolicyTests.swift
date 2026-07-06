@@ -109,4 +109,76 @@ final class IRFFDecoderAudioPolicyTests: XCTestCase {
             )
         )
     }
+
+    func testBufferingStatusTransitionEntersRegularBufferingAtLowDuration() {
+        XCTAssertEqual(
+            IRFFDecoderBufferingPolicy.statusTransition(
+                buffering: false,
+                bufferedDuration: 0.2,
+                endOfFile: false,
+                isLiveStream: false,
+                minBufferedDuration: 1.5,
+                bufferingStartTime: 0,
+                currentTime: 42
+            ),
+            IRFFDecoder.BufferingStatusTransition(buffering: true, bufferingStartTime: 42)
+        )
+    }
+
+    func testBufferingStatusTransitionEntersLiveBufferingAtCriticalDuration() {
+        XCTAssertEqual(
+            IRFFDecoderBufferingPolicy.statusTransition(
+                buffering: false,
+                bufferedDuration: 0.05,
+                endOfFile: false,
+                isLiveStream: true,
+                minBufferedDuration: 1.5,
+                bufferingStartTime: 0,
+                currentTime: 42
+            ),
+            IRFFDecoder.BufferingStatusTransition(buffering: true, bufferingStartTime: 42)
+        )
+        XCTAssertEqual(
+            IRFFDecoderBufferingPolicy.statusTransition(
+                buffering: false,
+                bufferedDuration: 0.1,
+                endOfFile: false,
+                isLiveStream: true,
+                minBufferedDuration: 1.5,
+                bufferingStartTime: 7,
+                currentTime: 42
+            ),
+            IRFFDecoder.BufferingStatusTransition(buffering: false, bufferingStartTime: 7)
+        )
+    }
+
+    func testBufferingStatusTransitionExitsWhenBufferedDurationMeetsThreshold() {
+        XCTAssertEqual(
+            IRFFDecoderBufferingPolicy.statusTransition(
+                buffering: true,
+                bufferedDuration: 1.5,
+                endOfFile: false,
+                isLiveStream: false,
+                minBufferedDuration: 1.5,
+                bufferingStartTime: 10,
+                currentTime: 11
+            ),
+            IRFFDecoder.BufferingStatusTransition(buffering: false, bufferingStartTime: 0)
+        )
+    }
+
+    func testBufferingStatusTransitionExitsAfterRegularTimeout() {
+        XCTAssertEqual(
+            IRFFDecoderBufferingPolicy.statusTransition(
+                buffering: true,
+                bufferedDuration: 0.3,
+                endOfFile: false,
+                isLiveStream: false,
+                minBufferedDuration: 1.5,
+                bufferingStartTime: 10,
+                currentTime: 12.1
+            ),
+            IRFFDecoder.BufferingStatusTransition(buffering: false, bufferingStartTime: 0)
+        )
+    }
 }

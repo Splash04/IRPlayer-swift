@@ -132,29 +132,31 @@ class IRAudioManager: NSObject {
 
     @objc private func audioSessionInterruptionHandler(_ notification: Notification) {
         guard let handlerTarget = handlerTarget, let interruptionHandler = interruptionHandler else { return }
-        guard let rawType = Self.unsignedInteger(from: notification.userInfo?[AVAudioSessionInterruptionTypeKey]),
-              let avType = AVAudioSession.InterruptionType(rawValue: rawType) else { return }
-        let type: IRAudioManagerInterruptionType = (avType == .ended) ? .ended : .begin
-        var option: IRAudioManagerInterruptionOption = .none
-        if let avOption = Self.unsignedInteger(from: notification.userInfo?[AVAudioSessionInterruptionOptionKey]) {
-            if avOption == AVAudioSession.InterruptionOptions.shouldResume.rawValue {
-                option = .shouldResume
-            }
-        }
-        interruptionHandler(handlerTarget, self, type, option)
+        guard let event = Self.interruptionEvent(
+            typeValue: notification.userInfo?[AVAudioSessionInterruptionTypeKey],
+            optionValue: notification.userInfo?[AVAudioSessionInterruptionOptionKey]
+        ) else { return }
+        interruptionHandler(handlerTarget, self, event.type, event.option)
     }
 
     @objc private func audioSessionRouteChangeHandler(_ notification: Notification) {
         guard let handlerTarget = handlerTarget, let routeChangeHandler = routeChangeHandler else { return }
-        guard let rawReason = Self.unsignedInteger(from: notification.userInfo?[AVAudioSessionRouteChangeReasonKey]),
-              let avReason = AVAudioSession.RouteChangeReason(rawValue: rawReason) else { return }
-        if avReason == .oldDeviceUnavailable {
-            routeChangeHandler(handlerTarget, self, .oldDeviceUnavailable)
-        }
+        guard let reason = Self.routeChangeReason(from: notification.userInfo?[AVAudioSessionRouteChangeReasonKey]) else { return }
+        routeChangeHandler(handlerTarget, self, reason)
     }
 
     static func unsignedInteger(from value: Any?) -> UInt? {
         return IRAudioManagerPolicy.unsignedInteger(from: value)
+    }
+
+    static func interruptionEvent(typeValue: Any?,
+                                  optionValue: Any?) -> (type: IRAudioManagerInterruptionType,
+                                                         option: IRAudioManagerInterruptionOption)? {
+        return IRAudioManagerPolicy.interruptionEvent(typeValue: typeValue, optionValue: optionValue)
+    }
+
+    static func routeChangeReason(from value: Any?) -> IRAudioManagerRouteChangeReason? {
+        return IRAudioManagerPolicy.routeChangeReason(from: value)
     }
 
     func registerAudioSession() -> Bool {

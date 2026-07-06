@@ -29,6 +29,18 @@ final class IRFFVideoDecoderTests: XCTestCase {
             IRFFVideoDecoder.shouldCreateYUVFrame(hasFrame: true, hasLuma: true, hasChromaB: true, hasChromaR: true),
             IRFFVideoDecoderPolicy.shouldCreateYUVFrame(hasFrame: true, hasLuma: true, hasChromaB: true, hasChromaR: true)
         )
+        XCTAssertEqual(
+            IRFFVideoDecoder.packetQueueFallbackDuration(packetDuration: 0,
+                                                         packetSize: 1,
+                                                         isFlushPacket: false,
+                                                         timebase: 0.25,
+                                                         fps: 30),
+            IRFFVideoDecoderPolicy.packetQueueFallbackDuration(packetDuration: 0,
+                                                               packetSize: 1,
+                                                               isFlushPacket: false,
+                                                               timebase: 0.25,
+                                                               fps: 30)
+        )
     }
 
     func testFlushPacketWrapperMatchesSentinelBuilder() {
@@ -182,6 +194,162 @@ final class IRFFVideoDecoderTests: XCTestCase {
         )
     }
 
+    func testPacketQueueFallbackDurationAppliesOnlyToPayloadPacketsWithoutDuration() {
+        XCTAssertEqual(
+            IRFFVideoDecoder.packetQueueFallbackDuration(packetDuration: 0,
+                                                         packetSize: 32,
+                                                         isFlushPacket: false,
+                                                         timebase: 0.25,
+                                                         fps: 25),
+            0.04,
+            accuracy: 0.0001
+        )
+        XCTAssertEqual(
+            IRFFVideoDecoder.packetQueueFallbackDuration(packetDuration: 4,
+                                                         packetSize: 32,
+                                                         isFlushPacket: false,
+                                                         timebase: 0.25,
+                                                         fps: 25),
+            0
+        )
+        XCTAssertEqual(
+            IRFFVideoDecoder.packetQueueFallbackDuration(packetDuration: 0,
+                                                         packetSize: 0,
+                                                         isFlushPacket: false,
+                                                         timebase: 0.25,
+                                                         fps: 25),
+            0
+        )
+        XCTAssertEqual(
+            IRFFVideoDecoder.packetQueueFallbackDuration(packetDuration: 0,
+                                                         packetSize: 32,
+                                                         isFlushPacket: true,
+                                                         timebase: 0.25,
+                                                         fps: 25),
+            0
+        )
+    }
+
+    func testQueueStateFlushDestroyAndFrameOutputRemainCallable() {
+        var codecContext = AVCodecContext()
+
+        withUnsafeMutablePointer(to: &codecContext) { codecContextPointer in
+            let decoder = IRFFVideoDecoder(
+                codecContext: codecContextPointer,
+                timebase: 0.25,
+                fps: 30,
+                delegate: nil
+            )
+            let frame = IRFFVideoFrame()
+            frame.duration = 0.5
+            frame.size = 12
+
+            XCTAssertEqual(decoder.packetSize(), 0)
+            XCTAssertTrue(decoder.empty())
+            XCTAssertTrue(decoder.packetEmpty())
+            XCTAssertTrue(decoder.frameEmpty())
+            XCTAssertEqual(decoder.duration(), 0)
+            XCTAssertEqual(decoder.packetDuration(), 0)
+            XCTAssertEqual(decoder.frameDuration(), 0)
+            XCTAssertNil(decoder.getFrameAsync())
+
+            decoder.send(videoFrame: frame)
+
+            XCTAssertFalse(decoder.empty())
+            XCTAssertFalse(decoder.frameEmpty())
+            XCTAssertEqual(decoder.frameDuration(), 0.5)
+            XCTAssertTrue(decoder.getFrameAsync() === frame)
+            XCTAssertTrue(decoder.frameEmpty())
+
+            var packet = AVPacket()
+            packet.duration = 4
+            packet.size = 32
+
+            decoder.putPacket(packet)
+
+            XCTAssertFalse(decoder.packetEmpty())
+            XCTAssertEqual(decoder.packetSize(), 32)
+            XCTAssertEqual(decoder.packetDuration(), 1, accuracy: 0.0001)
+
+            decoder.flush()
+
+            XCTAssertFalse(decoder.packetEmpty())
+            XCTAssertEqual(decoder.packetSize(), 0)
+            XCTAssertEqual(decoder.packetDuration(), 0)
+
+            decoder.destroy()
+
+            XCTAssertTrue(decoder.packetEmpty())
+            XCTAssertTrue(decoder.frameEmpty())
+            XCTAssertNil(decoder.getFrameAsync())
+            XCTAssertNil(decoder.getFrameSync())
+        }
+    }
+
+    func testDecodeFrameThreadFinishesAtEndOfFileWithoutPackets() {
+        var codecContext = AVCodecContext()
+        let delegate = VideoDecoderDelegateSpy()
+
+        withUnsafeMutablePointer(to: &codecContext) { codecContextPointer in
+            let decoder = IRFFVideoDecoder(
+                codecContext: codecContextPointer,
+                timebase: 0.25,
+                fps: 30,
+                delegate: delegate
+            )
+
+            decoder.endOfFile = true
+            decoder.decodeFrameThread()
+
+            XCTAssertFalse(decoder.decoding)
+        }
+
+        XCTAssertEqual(delegate.bufferingCheckCallCount, 1)
+        XCTAssertEqual(delegate.bufferedDurationUpdateCallCount, 0)
+        XCTAssertTrue(delegate.errors.isEmpty)
+    }
+
+    func testDecodeFrameThreadUsesSourceFrameBeforeFinishingAtEndOfFile() {
+        var codecContext = AVCodecContext()
+        let delegate = VideoDecoderDelegateSpy()
+        let sourceFrame = IRFFVideoFrame()
+        sourceFrame.duration = 0.5
+        sourceFrame.size = 12
+        let source = VideoDecoderDataSourceSpy(shouldHandle: true, frame: sourceFrame)
+
+        withUnsafeMutablePointer(to: &codecContext) { codecContextPointer in
+            let decoder = IRFFVideoDecoder(
+                codecContext: codecContextPointer,
+                timebase: 0.25,
+                fps: 30,
+                delegate: delegate
+            )
+            decoder.source = source
+            decoder.endOfFile = true
+
+            var packet = AVPacket()
+            packet.stream_index = 0
+            packet.duration = 1
+            packet.size = 1
+            var byte: UInt8 = 1
+            withUnsafeMutablePointer(to: &byte) { pointer in
+                packet.data = pointer
+                decoder.putPacket(packet)
+                decoder.decodeFrameThread()
+            }
+
+            XCTAssertFalse(decoder.decoding)
+            XCTAssertTrue(decoder.getFrameAsync() === sourceFrame)
+            XCTAssertTrue(decoder.frameEmpty())
+        }
+
+        XCTAssertEqual(source.shouldHandleCallCount, 1)
+        XCTAssertEqual(source.decodeFrameCallCount, 1)
+        XCTAssertEqual(delegate.bufferedDurationUpdateCallCount, 1)
+        XCTAssertEqual(delegate.bufferingCheckCallCount, 1)
+        XCTAssertTrue(delegate.errors.isEmpty)
+    }
+
     func testReleaseDoesNotPrintDebugOutput() {
         var codecContext = AVCodecContext()
 
@@ -200,5 +368,45 @@ final class IRFFVideoDecoderTests: XCTestCase {
         }
 
         XCTAssertEqual(output, "")
+    }
+}
+
+private final class VideoDecoderDelegateSpy: IRFFVideoDecoderDelegate {
+    private(set) var errors: [NSError] = []
+    private(set) var bufferedDurationUpdateCallCount = 0
+    private(set) var bufferingCheckCallCount = 0
+
+    func videoDecoder(_ videoDecoder: IRFFVideoDecoder, didError error: Error) {
+        errors.append(error as NSError)
+    }
+
+    func videoDecoderNeedUpdateBufferedDuration(_ videoDecoder: IRFFVideoDecoder) {
+        bufferedDurationUpdateCallCount += 1
+    }
+
+    func videoDecoderNeedCheckBufferingStatus(_ videoDecoder: IRFFVideoDecoder) {
+        bufferingCheckCallCount += 1
+    }
+}
+
+private final class VideoDecoderDataSourceSpy: IRFFVideoDecoderDataSource {
+    private let shouldHandleResult: Bool
+    private let frame: IRFFVideoFrame?
+    private(set) var shouldHandleCallCount = 0
+    private(set) var decodeFrameCallCount = 0
+
+    init(shouldHandle: Bool, frame: IRFFVideoFrame?) {
+        self.shouldHandleResult = shouldHandle
+        self.frame = frame
+    }
+
+    func shouldHandle(_ videoDecoder: IRFFVideoDecoderInfo, decodeFrame packet: AVPacket) -> Bool {
+        shouldHandleCallCount += 1
+        return shouldHandleResult
+    }
+
+    func videoDecoder(_ videoDecoder: IRFFVideoDecoderInfo, decodeFrame packet: AVPacket) -> IRFFVideoFrame? {
+        decodeFrameCallCount += 1
+        return frame
     }
 }

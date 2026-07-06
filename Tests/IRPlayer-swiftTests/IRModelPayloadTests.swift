@@ -103,6 +103,13 @@ final class IRModelPayloadTests: XCTestCase {
     func testStatePayloadDefaultsOutOfRangeRawValues() {
         XCTAssertEqual(IRPlayerNotificationPayload.state(NSNumber(value: Int.max)), .none)
         XCTAssertEqual(IRPlayerNotificationPayload.state(Int.min), .none)
+        XCTAssertEqual(IRPlayerNotificationPayloadPolicy.state(Int.max), .none)
+    }
+
+    func testStatePayloadAcceptsTypedStatesAndIntegerRawValues() {
+        XCTAssertEqual(IRPlayerNotificationPayload.state(IRPlayerState.playing), .playing)
+        XCTAssertEqual(IRPlayerNotificationPayload.state(IRPlayerState.finished.rawValue), .finished)
+        XCTAssertEqual(IRPlayerNotificationPayload.state("finished"), .none)
     }
 
     func testProgressParserAcceptsNumericPayloadsAndDefaultsMissingValues() {
@@ -169,8 +176,35 @@ final class IRModelPayloadTests: XCTestCase {
         XCTAssertEqual(IRPlayerNotificationPayload.cgFloat(Double(6.5)), 6.5, accuracy: 0.0001)
         XCTAssertEqual(IRPlayerNotificationPayload.cgFloat(Float(8.5)), 8.5, accuracy: 0.0001)
         XCTAssertEqual(IRPlayerNotificationPayload.cgFloat(10), 10, accuracy: 0.0001)
+        XCTAssertEqual(IRPlayerNotificationPayload.cgFloat(nil), 0)
         XCTAssertEqual(IRPlayerNotificationPayload.cgFloat("not-a-number"), 0)
+        XCTAssertEqual(IRPlayerNotificationPayload.cgFloat(true), 0)
+        XCTAssertEqual(IRPlayerNotificationPayload.cgFloat(NSNumber(value: false)), 0)
+        XCTAssertEqual(IRPlayerNotificationPayload.cgFloat(CGFloat.nan), 0)
+        XCTAssertEqual(IRPlayerNotificationPayload.cgFloat(CGFloat.infinity), 0)
+        XCTAssertEqual(IRPlayerNotificationPayload.cgFloat(Float.nan), 0)
+        XCTAssertEqual(IRPlayerNotificationPayload.cgFloat(Float.infinity), 0)
+        XCTAssertEqual(IRPlayerNotificationPayload.cgFloat(Double.nan), 0)
         XCTAssertEqual(IRPlayerNotificationPayload.cgFloat(Double.infinity), 0)
+    }
+
+    func testPayloadPolicyCGFloatConvertsDirectNumericInputs() {
+        XCTAssertEqual(IRPlayerNotificationPayloadPolicy.cgFloat(CGFloat(1.25)), 1.25, accuracy: 0.0001)
+        XCTAssertEqual(IRPlayerNotificationPayloadPolicy.cgFloat(NSNumber(value: 2.5)), 2.5, accuracy: 0.0001)
+        XCTAssertEqual(IRPlayerNotificationPayloadPolicy.cgFloat(Double(3.75)), 3.75, accuracy: 0.0001)
+        XCTAssertEqual(IRPlayerNotificationPayloadPolicy.cgFloat(Float(4.5)), 4.5, accuracy: 0.0001)
+        XCTAssertEqual(IRPlayerNotificationPayloadPolicy.cgFloat(5), 5, accuracy: 0.0001)
+        XCTAssertEqual(IRPlayerNotificationPayloadPolicy.cgFloat("5"), 0)
+        XCTAssertEqual(IRPlayerNotificationPayloadPolicy.cgFloat(NSNumber(value: true)), 0)
+        XCTAssertEqual(IRPlayerNotificationPayloadPolicy.cgFloat(Double.infinity), 0)
+    }
+
+    func testPayloadPolicyStateAcceptsDirectIntegerRawValues() {
+        XCTAssertEqual(
+            IRPlayerNotificationPayloadPolicy.state(IRPlayerState.readyToPlay.rawValue),
+            .readyToPlay
+        )
+        XCTAssertEqual(IRPlayerNotificationPayloadPolicy.state(Int.max), .none)
     }
 
     func testProgressPayloadDefaultsNonFiniteNumbers() {

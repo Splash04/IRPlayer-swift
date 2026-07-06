@@ -129,13 +129,65 @@ final class IRAudioManagerNotificationTests: XCTestCase {
     func testUnsignedIntegerRejectsFractionalAndBooleanNumericPayloads() {
         XCTAssertNil(IRAudioManager.unsignedInteger(from: NSNumber(value: 1.5)))
         XCTAssertNil(IRAudioManager.unsignedInteger(from: NSNumber(value: true)))
+        XCTAssertNil(IRAudioManager.unsignedInteger(from: nil))
         XCTAssertNil(IRAudioManager.unsignedInteger(from: "not-a-number"))
     }
 
     func testUnsignedIntegerWrapperMatchesPolicy() {
         XCTAssertEqual(IRAudioManager.unsignedInteger(from: UInt(3)), IRAudioManagerPolicy.unsignedInteger(from: UInt(3)))
         XCTAssertEqual(IRAudioManager.unsignedInteger(from: NSNumber(value: 4)), IRAudioManagerPolicy.unsignedInteger(from: NSNumber(value: 4)))
+        XCTAssertEqual(IRAudioManagerPolicy.unsignedInteger(from: UInt(5)), 5)
+        XCTAssertEqual(IRAudioManagerPolicy.unsignedInteger(from: 6), 6)
         XCTAssertNil(IRAudioManagerPolicy.unsignedInteger(from: NSNumber(value: -1)))
         XCTAssertNil(IRAudioManagerPolicy.unsignedInteger(from: NSNumber(value: true)))
+        XCTAssertNil(IRAudioManagerPolicy.unsignedInteger(from: nil))
+    }
+
+    func testInterruptionEventMapsAVPayloadsToInternalTypeAndOption() throws {
+        let begin = try XCTUnwrap(
+            IRAudioManager.interruptionEvent(
+                typeValue: AVAudioSession.InterruptionType.began.rawValue,
+                optionValue: nil
+            )
+        )
+        XCTAssertEqual(begin.type, .begin)
+        XCTAssertEqual(begin.option, .none)
+
+        let ended = try XCTUnwrap(
+            IRAudioManager.interruptionEvent(
+                typeValue: AVAudioSession.InterruptionType.ended.rawValue,
+                optionValue: AVAudioSession.InterruptionOptions.shouldResume.rawValue
+            )
+        )
+        XCTAssertEqual(ended.type, .ended)
+        XCTAssertEqual(ended.option, .shouldResume)
+
+        let endedWithoutResume = try XCTUnwrap(
+            IRAudioManager.interruptionEvent(
+                typeValue: AVAudioSession.InterruptionType.ended.rawValue,
+                optionValue: UInt.max
+            )
+        )
+        XCTAssertEqual(endedWithoutResume.type, .ended)
+        XCTAssertEqual(endedWithoutResume.option, .none)
+    }
+
+    func testInterruptionEventRejectsMalformedPayloads() {
+        XCTAssertNil(IRAudioManager.interruptionEvent(typeValue: nil, optionValue: nil))
+        XCTAssertNil(IRAudioManager.interruptionEvent(typeValue: NSNumber(value: true), optionValue: nil))
+        XCTAssertNil(IRAudioManager.interruptionEvent(typeValue: UInt.max, optionValue: nil))
+        XCTAssertNil(IRAudioManagerPolicy.interruptionEvent(typeValue: NSNumber(value: 1.5), optionValue: nil))
+    }
+
+    func testRouteChangeReasonMapsOnlyOldDeviceUnavailable() {
+        XCTAssertEqual(
+            IRAudioManager.routeChangeReason(from: AVAudioSession.RouteChangeReason.oldDeviceUnavailable.rawValue),
+            .oldDeviceUnavailable
+        )
+        XCTAssertNil(
+            IRAudioManager.routeChangeReason(from: AVAudioSession.RouteChangeReason.newDeviceAvailable.rawValue)
+        )
+        XCTAssertNil(IRAudioManager.routeChangeReason(from: UInt.max))
+        XCTAssertNil(IRAudioManagerPolicy.routeChangeReason(from: NSNumber(value: true)))
     }
 }

@@ -1,4 +1,5 @@
 import CoreMedia
+import CoreVideo
 import Foundation
 import IRFFMpeg
 import VideoToolbox
@@ -171,6 +172,29 @@ final class IRFFVideoToolBoxTests: XCTestCase {
         }
     }
 
+    func testConvertedNALBlockPayloadFreeBlockReleasesAllocatedDemuxBuffer() throws {
+        guard let rawMemoryBlock = malloc(4) else {
+            throw XCTSkip("Allocator unavailable")
+        }
+        var didReleaseMemoryBlock = false
+        defer {
+            if !didReleaseMemoryBlock {
+                free(rawMemoryBlock)
+            }
+        }
+
+        let memoryBlock = rawMemoryBlock.assumingMemoryBound(to: UInt8.self)
+        let payload = try XCTUnwrap(IRFFVideoToolBox.convertedNALBlockPayload(
+            memoryBlock: memoryBlock,
+            demuxSize: 4,
+            packetSize: 4
+        ))
+        let freeBlock = try XCTUnwrap(payload.customBlockSource.FreeBlock)
+
+        freeBlock(payload.customBlockSource.refCon, rawMemoryBlock, payload.blockLength)
+        didReleaseMemoryBlock = true
+    }
+
     private func assertThreeByteNALPayload(_ bytes: [UInt8], isValid: Bool, file: StaticString = #filePath, line: UInt = #line) throws {
         var packet = AVPacket()
         var bytes = bytes
@@ -198,6 +222,133 @@ final class IRFFVideoToolBoxTests: XCTestCase {
 
             XCTAssertEqual(videoToolBox.decodeStatus, -2)
             XCTAssertNil(videoToolBox.decodeOutput)
+        }
+    }
+
+    func testTrySetupVTSessionReturnsFalseForInvalidContextAndHonorsCachedToken() {
+        var codecContext = AVCodecContext()
+        codecContext.codec_id = AV_CODEC_ID_AAC
+
+        withUnsafeMutablePointer(to: &codecContext) { context in
+            let videoToolBox = IRFFVideoToolBox.videoToolBox(with: context)
+
+            XCTAssertFalse(videoToolBox.trySetupVTSession())
+            XCTAssertFalse(videoToolBox.vtSessionToken)
+
+            videoToolBox.vtSessionToken = true
+
+            XCTAssertTrue(videoToolBox.trySetupVTSession())
+        }
+    }
+
+    func testSetupVTSessionNormalizesThreeByteNALMarkerBeforeSessionAttempt() {
+        var codecContext = AVCodecContext()
+        codecContext.codec_id = AV_CODEC_ID_H264
+        codecContext.width = 0
+        codecContext.height = 0
+
+        var extradata = [UInt8](arrayLiteral: 1, 0, 0, 0, 0xFE, 0, 0)
+        extradata.withUnsafeMutableBufferPointer { buffer in
+            codecContext.extradata = buffer.baseAddress
+            codecContext.extradata_size = Int32(buffer.count)
+
+            withUnsafeMutablePointer(to: &codecContext) { context in
+                let videoToolBox = IRFFVideoToolBox.videoToolBox(with: context)
+
+                do {
+                    try videoToolBox.setupVTSession()
+                } catch {
+                    XCTAssertTrue(
+                        [.createFormatDescription, .createSession].contains(error as? IRFFVideoToolBoxErrorCode)
+                    )
+                }
+                XCTAssertEqual(buffer[4], 0xFF)
+                XCTAssertTrue(videoToolBox.needConvertNALSize3To4)
+                XCTAssertNil(videoToolBox.imageBuffer())
+
+                videoToolBox.cleanVTSession()
+                XCTAssertFalse(videoToolBox.needConvertNALSize3To4)
+                XCTAssertFalse(videoToolBox.vtSessionToken)
+            }
+        }
+    }
+
+    func testSendPacketShortCircuitsForInvalidSetupMissingPacketAndMissingFormatDescription() {
+        var codecContext = AVCodecContext()
+        codecContext.codec_id = AV_CODEC_ID_AAC
+
+        withUnsafeMutablePointer(to: &codecContext) { context in
+            let videoToolBox = IRFFVideoToolBox.videoToolBox(with: context)
+
+            XCTAssertFalse(videoToolBox.sendPacket(AVPacket()))
+
+            videoToolBox.vtSessionToken = true
+
+            XCTAssertFalse(videoToolBox.sendPacket(AVPacket()))
+
+            var bytes = [UInt8](arrayLiteral: 0, 0, 0, 1)
+            bytes.withUnsafeMutableBufferPointer { buffer in
+                let packet = makePacket(data: buffer.baseAddress, size: buffer.count)
+
+                XCTAssertFalse(videoToolBox.sendPacket(packet))
+                XCTAssertEqual(videoToolBox.decodeStatus, noErr)
+                XCTAssertNil(videoToolBox.decodeOutput)
+            }
+        }
+    }
+
+    func testSendPacketRejectsUnboundedThreeByteNALPayloadBeforeConversion() {
+        var codecContext = AVCodecContext()
+
+        withUnsafeMutablePointer(to: &codecContext) { context in
+            let videoToolBox = IRFFVideoToolBox.videoToolBox(with: context)
+            videoToolBox.vtSessionToken = true
+            videoToolBox.needConvertNALSize3To4 = true
+
+            var bytes = [UInt8](arrayLiteral: 0, 0, 5, 1, 2)
+            bytes.withUnsafeMutableBufferPointer { buffer in
+                let packet = makePacket(data: buffer.baseAddress, size: buffer.count)
+
+                XCTAssertFalse(videoToolBox.sendPacket(packet))
+                XCTAssertEqual(videoToolBox.decodeStatus, noErr)
+                XCTAssertNil(videoToolBox.decodeOutput)
+            }
+        }
+    }
+
+    func testImageBufferReturnsOnlySuccessfulDecodeOutput() throws {
+        var codecContext = AVCodecContext()
+
+        try withUnsafeMutablePointer(to: &codecContext) { context in
+            let videoToolBox = IRFFVideoToolBox.videoToolBox(with: context)
+
+            XCTAssertNil(videoToolBox.imageBuffer())
+
+            var pixelBuffer: CVPixelBuffer?
+            let status = CVPixelBufferCreate(
+                nil,
+                4,
+                4,
+                kCVPixelFormatType_32BGRA,
+                nil,
+                &pixelBuffer
+            )
+            XCTAssertEqual(status, kCVReturnSuccess)
+            let imageBuffer = try XCTUnwrap(pixelBuffer)
+
+            videoToolBox.decodeStatus = noErr
+            videoToolBox.decodeOutput = imageBuffer
+
+            XCTAssertTrue(videoToolBox.imageBuffer() === imageBuffer)
+
+            videoToolBox.decodeStatus = -1
+
+            XCTAssertNil(videoToolBox.imageBuffer())
+
+            videoToolBox.decodeStatus = noErr
+            videoToolBox.cleanDecodeInfo()
+
+            XCTAssertNil(videoToolBox.imageBuffer())
         }
     }
 
@@ -331,5 +482,12 @@ final class IRFFVideoToolBoxTests: XCTestCase {
         XCTAssertFalse(IRFFVideoToolBox.decodeFrameSucceeded(status: -1, callbackStatus: noErr, hasOutput: true))
         XCTAssertFalse(IRFFVideoToolBox.decodeFrameSucceeded(status: noErr, callbackStatus: -1, hasOutput: true))
         XCTAssertFalse(IRFFVideoToolBox.decodeFrameSucceeded(status: noErr, callbackStatus: noErr, hasOutput: false))
+    }
+
+    private func makePacket(data: UnsafeMutablePointer<UInt8>?, size: Int) -> AVPacket {
+        var packet = AVPacket()
+        packet.data = data
+        packet.size = Int32(size)
+        return packet
     }
 }

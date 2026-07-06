@@ -101,6 +101,17 @@ final class IRGLProgramFactoryTests: XCTestCase {
         XCTAssertTrue(program.mapProjection is IRGLProjectionOrthographic)
     }
 
+    func testPanoramaFactoryKeepsProjectionWhenViewportIsInvalid() {
+        let invalidViewport = CGRect(x: 0, y: 0, width: CGFloat.nan, height: 100)
+
+        let program = IRGLProgramFactory.createIRGLProgram2DFisheye2Pano(pixelFormat: .RGB_IRPixelFormat,
+                                                                        viewportRange: invalidViewport,
+                                                                        parameter: nil)
+
+        XCTAssertNil(program.tramsformController)
+        XCTAssertTrue(program.mapProjection is IRGLProjectionOrthographic)
+    }
+
     func testFisheyeFactoryRejectsIncompatibleParameter() {
         let invalidParameter = IRMediaParameter(width: 320, height: 180)
 
@@ -146,6 +157,18 @@ final class IRGLProgramFactoryTests: XCTestCase {
         XCTAssertEqual(program.tramsformController?.scopeRange?.defaultLng, 90)
     }
 
+    func testFisheyeFactoryKeepsProjectionWhenViewportIsInvalid() throws {
+        let parameter = makeFisheyeParameter()
+        let invalidViewport = CGRect(x: 0, y: 0, width: CGFloat.nan, height: 180)
+
+        let program = try XCTUnwrap(IRGLProgramFactory.createIRGLProgram3DFisheye(pixelFormat: .YUV_IRPixelFormat,
+                                                                                 viewportRange: invalidViewport,
+                                                                                 parameter: parameter))
+
+        XCTAssertNil(program.tramsformController)
+        XCTAssertTrue(program.mapProjection is IRGLProjectionEquirectangular)
+    }
+
     func testFourPanelPerspectiveFactorySplitsViewportIntoQuadrants() {
         let viewport = CGRect(x: 0, y: 0, width: 400, height: 200)
 
@@ -187,6 +210,20 @@ final class IRGLProgramFactoryTests: XCTestCase {
         XCTAssertTrue(program.programs.allSatisfy { $0.mapProjection is IRGLProjectionEquirectangular })
         XCTAssertEqual(program.programs.compactMap { $0.tramsformController?.scopeRange?.defaultLat }, [-40, -40, -40, -40])
         XCTAssertEqual(program.programs.compactMap { $0.tramsformController?.scopeRange?.defaultLng }, [90, 180, 270, 0])
+    }
+
+    func testFourPanelFisheyeFactoryKeepsChildProjectionsWhenViewportIsInvalid() throws {
+        let parameter = makeFisheyeParameter()
+        let invalidViewport = CGRect(x: 0, y: 0, width: CGFloat.nan, height: 200)
+
+        let program = try XCTUnwrap(IRGLProgramFactory.createIRGLProgram3DFisheye4P(pixelFormat: .YUV_IRPixelFormat,
+                                                                                   viewportRange: invalidViewport,
+                                                                                   parameter: parameter))
+
+        XCTAssertNil(program.tramsformController)
+        XCTAssertEqual(program.programs.count, 4)
+        XCTAssertTrue(program.programs.allSatisfy { $0.tramsformController == nil })
+        XCTAssertTrue(program.programs.allSatisfy { $0.mapProjection is IRGLProjectionEquirectangular })
     }
 
     func testVRAndDistortionFactoriesAttachExpectedControllersAndProjection() {

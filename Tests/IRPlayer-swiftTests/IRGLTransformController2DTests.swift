@@ -15,6 +15,35 @@ final class IRGLTransformController2DTests: XCTestCase {
         XCTAssertEqual(try XCTUnwrap(controller.scaleRange).maxScaleY, 4.5, accuracy: 0.0001)
     }
 
+    func testSetupDefaultTransformKeepsExistingLargerScaleRange() throws {
+        let controller = IRGLTransformController2D(viewportWidth: 100, viewportHeight: 80)
+        controller.scaleRange = IRGLScaleRange(minScaleX: 0.5,
+                                               minScaleY: 0.5,
+                                               maxScaleX: 10,
+                                               maxScaleY: 12,
+                                               defaultScaleX: 1,
+                                               defaultScaleY: 1)
+
+        controller.setupDefaultTransform(scaleX: 2, scaleY: 3)
+
+        XCTAssertEqual(controller.getDefaultTransformScale().x, 2, accuracy: 0.0001)
+        XCTAssertEqual(controller.getDefaultTransformScale().y, 3, accuracy: 0.0001)
+        XCTAssertEqual(try XCTUnwrap(controller.scaleRange).maxScaleX, 10, accuracy: 0.0001)
+        XCTAssertEqual(try XCTUnwrap(controller.scaleRange).maxScaleY, 12, accuracy: 0.0001)
+    }
+
+    func testScrollWithoutDelegateLeavesScopeUnchanged() {
+        let controller = IRGLTransformController2D(viewportWidth: 100, viewportHeight: 100)
+        controller.update(fx: 50, fy: 50, sx: 2, sy: 2)
+        let initialOffsetX = controller.getScope().offsetX
+        let initialOffsetY = controller.getScope().offsetY
+
+        controller.scroll(dx: 1_000, dy: 1_000)
+
+        XCTAssertEqual(controller.getScope().offsetX, initialOffsetX, accuracy: 0.0001)
+        XCTAssertEqual(controller.getScope().offsetY, initialOffsetY, accuracy: 0.0001)
+    }
+
     func testScrollClampsToBoundsAndReportsStatus() {
         let controller = IRGLTransformController2D(viewportWidth: 100, viewportHeight: 100)
         let delegate = TransformDelegateSpy()
@@ -45,6 +74,20 @@ final class IRGLTransformController2DTests: XCTestCase {
         XCTAssertEqual(delegate.horizontalStatuses.count, 1)
         XCTAssertEqual(delegate.verticalStatuses.count, 1)
         XCTAssertEqual(delegate.didScrollStatuses.count, 1)
+    }
+
+    func testScrollStopsAfterWillScrollWhenPolicyRejectsCurrentScope() {
+        let controller = IRGLTransformController2D(viewportWidth: 100, viewportHeight: 100)
+        let delegate = TransformDelegateSpy()
+        controller.delegate = delegate
+        controller.getScope().scaleX = 0
+
+        controller.scroll(dx: 10, dy: 20)
+
+        XCTAssertEqual(delegate.willScrollCalls.count, 1)
+        XCTAssertTrue(delegate.horizontalStatuses.isEmpty)
+        XCTAssertTrue(delegate.verticalStatuses.isEmpty)
+        XCTAssertTrue(delegate.didScrollStatuses.isEmpty)
     }
 
     func testDegreeScrollUsesFullScopeRangeWidth() {
@@ -90,6 +133,61 @@ final class IRGLTransformController2DTests: XCTestCase {
         XCTAssertEqual(controller.getScope().offsetX, 0, accuracy: 0.0001)
         XCTAssertEqual(controller.getScope().offsetY, 0, accuracy: 0.0001)
         assertFinite(controller.getModelViewProjectionMatrix())
+    }
+
+    func testNilRangesFallBackToZeroDegreeScrollAndUnitScale() {
+        let controller = IRGLTransformController2D(viewportWidth: 100, viewportHeight: 100)
+        let delegate = TransformDelegateSpy()
+        controller.delegate = delegate
+        controller.scaleRange = IRGLScaleRange(minScaleX: 1,
+                                               minScaleY: 1,
+                                               maxScaleX: 4,
+                                               maxScaleY: 4,
+                                               defaultScaleX: 2,
+                                               defaultScaleY: 2)
+        controller.scopeRange = IRGLScopeRange(minLat: -50,
+                                               maxLat: 50,
+                                               minLng: -50,
+                                               maxLng: 50,
+                                               defaultLat: 10,
+                                               defaultLng: 20)
+        let offsetAfterConfiguredRange = CGPoint(x: CGFloat(controller.getScope().offsetX),
+                                                 y: CGFloat(controller.getScope().offsetY))
+
+        controller.scopeRange = nil
+        XCTAssertEqual(controller.getScope().offsetX, Float(offsetAfterConfiguredRange.x), accuracy: 0.0001)
+        XCTAssertEqual(controller.getScope().offsetY, Float(offsetAfterConfiguredRange.y), accuracy: 0.0001)
+
+        controller.scaleRange = nil
+
+        XCTAssertEqual(controller.getScope().offsetX, 0, accuracy: 0.0001)
+        XCTAssertEqual(controller.getScope().offsetY, 0, accuracy: 0.0001)
+        XCTAssertEqual(controller.getScope().scaleX, 1, accuracy: 0.0001)
+        XCTAssertEqual(controller.getScope().scaleY, 1, accuracy: 0.0001)
+        assertFinite(controller.getModelViewProjectionMatrix())
+    }
+
+    func testResetViewportWithoutResetTransformFallsBackWhenResizeDecisionIsInvalid() {
+        let controller = IRGLTransformController2D(viewportWidth: 100, viewportHeight: 100)
+        controller.update(fx: 50, fy: 50, sx: 2, sy: 2)
+        controller.getScope().scaleX = 0
+
+        controller.resetViewport(width: 320, height: 180, resetTransform: false)
+
+        XCTAssertEqual(controller.getScope().w, 320)
+        XCTAssertEqual(controller.getScope().h, 180)
+        XCTAssertEqual(controller.getScope().scaleX, 0, accuracy: 0.0001)
+        assertFinite(controller.getModelViewProjectionMatrix())
+    }
+
+    func testRotateIsNoOpFor2DController() {
+        let controller = IRGLTransformController2D(viewportWidth: 100, viewportHeight: 100)
+        controller.update(fx: 50, fy: 50, sx: 2, sy: 2)
+        let matrix = controller.getModelViewProjectionMatrix()
+
+        controller.rotate(degree: 45)
+
+        assertMatrixEqual(controller.getModelViewProjectionMatrix(), matrix)
     }
 
     func testUpdateWithZeroViewportKeepsMatrixFinite() {
@@ -219,16 +317,37 @@ final class IRGLTransformController2DTests: XCTestCase {
         XCTAssertEqual(matrix.columns.3.x, 0, accuracy: 0.0001, file: file, line: line)
     }
 
+    private func assertMatrixEqual(
+        _ lhs: simd_float4x4,
+        _ rhs: simd_float4x4,
+        accuracy: Float = 0.0001,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let leftColumns = [lhs.columns.0, lhs.columns.1, lhs.columns.2, lhs.columns.3]
+        let rightColumns = [rhs.columns.0, rhs.columns.1, rhs.columns.2, rhs.columns.3]
+
+        for (left, right) in zip(leftColumns, rightColumns) {
+            XCTAssertEqual(left.x, right.x, accuracy: accuracy, file: file, line: line)
+            XCTAssertEqual(left.y, right.y, accuracy: accuracy, file: file, line: line)
+            XCTAssertEqual(left.z, right.z, accuracy: accuracy, file: file, line: line)
+            XCTAssertEqual(left.w, right.w, accuracy: accuracy, file: file, line: line)
+        }
+    }
+
 }
 
 private final class TransformDelegateSpy: IRGLTransformControllerDelegate {
     var allowHorizontal = true
     var allowVertical = true
+    private(set) var willScrollCalls: [(dx: Float, dy: Float)] = []
     private(set) var horizontalStatuses: [IRGLTransformController.ScrollStatus] = []
     private(set) var verticalStatuses: [IRGLTransformController.ScrollStatus] = []
     private(set) var didScrollStatuses: [IRGLTransformController.ScrollStatus] = []
 
-    func willScroll(dx: Float, dy: Float, transformController: IRGLTransformController) {}
+    func willScroll(dx: Float, dy: Float, transformController: IRGLTransformController) {
+        willScrollCalls.append((dx, dy))
+    }
 
     func doScrollHorizontal(status: IRGLTransformController.ScrollStatus, transformController: IRGLTransformController) -> Bool {
         horizontalStatuses.append(status)

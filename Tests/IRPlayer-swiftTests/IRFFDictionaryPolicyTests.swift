@@ -7,6 +7,24 @@ final class IRFFDictionaryPolicyTests: XCTestCase {
         XCTAssertNil(IRFFDictionaryPolicy.foundationDictionary(from: nil))
     }
 
+    func testAVDictionaryCreationRejectsEmptyEntries() {
+        XCTAssertNil(IRFFDictionaryPolicy.avDictionary(entries: []))
+    }
+
+    func testFoundationDictionaryBridgesRealAVDictionaryEntries() throws {
+        var avDictionary = try XCTUnwrap(IRFFDictionaryPolicy.avDictionary(entries: [
+            (key: "language", value: "eng"),
+            (key: "title", value: "Camera 1")
+        ]))
+        defer { IRFFDictionaryPolicy.freeAVDictionary(&avDictionary) }
+
+        let dictionary = try XCTUnwrap(IRFFDictionaryPolicy.foundationDictionary(from: avDictionary.rawPointer))
+
+        XCTAssertEqual(dictionary["language"], "eng")
+        XCTAssertEqual(dictionary["title"], "Camera 1")
+        XCTAssertEqual(dictionary.count, 2)
+    }
+
     func testCStringDecodingRejectsMissingAndMalformedUTF8Pointers() throws {
         XCTAssertNil(IRFFDictionaryPolicy.string(fromCString: nil))
 
@@ -17,9 +35,31 @@ final class IRFFDictionaryPolicyTests: XCTestCase {
         }
     }
 
-    func testCStringDecodingReturnsValidUTF8Strings() throws {
-        try "Camera 1".withCString { value in
+    func testCStringDecodingReturnsValidUTF8Strings() {
+        "Camera 1".withCString { value in
             XCTAssertEqual(IRFFDictionaryPolicy.string(fromCString: value), "Camera 1")
+        }
+    }
+
+    func testFoundationDictionaryEntriesBridgeValidCStringPairsAndSkipMalformedPairs() throws {
+        let invalidValue: [CChar] = [-1, 0]
+
+        try invalidValue.withUnsafeBufferPointer { invalidBuffer in
+            let invalidCString = try XCTUnwrap(invalidBuffer.baseAddress)
+            "language".withCString { languageKey in
+                "eng".withCString { languageValue in
+                    "title".withCString { titleKey in
+                        let bridgedDictionary = IRFFDictionaryPolicy.foundationDictionary(entries: [
+                            (key: languageKey, value: languageValue),
+                            (key: titleKey, value: invalidCString)
+                        ])
+
+                        XCTAssertEqual(bridgedDictionary?["language"], "eng")
+                        XCTAssertNil(bridgedDictionary?["title"])
+                        XCTAssertEqual(bridgedDictionary?.count, 1)
+                    }
+                }
+            }
         }
     }
 }

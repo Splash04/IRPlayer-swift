@@ -7,6 +7,7 @@
 
 import CoreGraphics
 import XCTest
+import UIKit
 @testable import IRPlayer_swift
 
 final class IRSensorTests: XCTestCase {
@@ -62,5 +63,70 @@ final class IRSensorTests: XCTestCase {
         }
 
         XCTAssertEqual(output, "")
+    }
+
+    func testMotionDegreesMapsSupportedOrientations() throws {
+        let inversePitch = Double.pi / 6
+        let inverseRoll = Double.pi / 3
+
+        let portrait = try XCTUnwrap(IRSensor.motionDegrees(inversePitchRadians: inversePitch,
+                                                            inverseRollRadians: inverseRoll,
+                                                            pitchDegrees: 20,
+                                                            rollDegrees: 0,
+                                                            orientation: .portrait))
+        XCTAssertEqual(portrait.degreeX, 60, accuracy: 0.0001)
+        XCTAssertEqual(portrait.degreeY, 30, accuracy: 0.0001)
+
+        let upsideDown = try XCTUnwrap(IRSensor.motionDegrees(inversePitchRadians: inversePitch,
+                                                             inverseRollRadians: inverseRoll,
+                                                             pitchDegrees: -20,
+                                                             rollDegrees: 0,
+                                                             orientation: .portraitUpsideDown))
+        XCTAssertEqual(upsideDown.degreeX, -60, accuracy: 0.0001)
+        XCTAssertEqual(upsideDown.degreeY, -30, accuracy: 0.0001)
+
+        let landscapeLeft = try XCTUnwrap(IRSensor.motionDegrees(inversePitchRadians: inversePitch,
+                                                                 inverseRollRadians: inverseRoll,
+                                                                 pitchDegrees: 0,
+                                                                 rollDegrees: 20,
+                                                                 orientation: .landscapeLeft))
+        XCTAssertEqual(landscapeLeft.degreeX, -30, accuracy: 0.0001)
+        XCTAssertEqual(landscapeLeft.degreeY, 60, accuracy: 0.0001)
+
+        let landscapeRight = try XCTUnwrap(IRSensor.motionDegrees(inversePitchRadians: inversePitch,
+                                                                  inverseRollRadians: inverseRoll,
+                                                                  pitchDegrees: 0,
+                                                                  rollDegrees: -20,
+                                                                  orientation: .landscapeRight))
+        XCTAssertEqual(landscapeRight.degreeX, 30, accuracy: 0.0001)
+        XCTAssertEqual(landscapeRight.degreeY, -60, accuracy: 0.0001)
+    }
+
+    func testMotionDegreesRejectsUnsupportedOrOutOfThresholdOrientations() {
+        XCTAssertNil(IRSensor.motionDegrees(inversePitchRadians: 0,
+                                            inverseRollRadians: 0,
+                                            pitchDegrees: 14.9,
+                                            rollDegrees: 0,
+                                            orientation: .portrait))
+        XCTAssertNil(IRSensor.motionDegrees(inversePitchRadians: 0,
+                                            inverseRollRadians: 0,
+                                            pitchDegrees: -14.9,
+                                            rollDegrees: 0,
+                                            orientation: .portraitUpsideDown))
+        XCTAssertNil(IRSensor.motionDegrees(inversePitchRadians: 0,
+                                            inverseRollRadians: 0,
+                                            pitchDegrees: 0,
+                                            rollDegrees: 14.9,
+                                            orientation: .landscapeLeft))
+        XCTAssertNil(IRSensor.motionDegrees(inversePitchRadians: 0,
+                                            inverseRollRadians: 0,
+                                            pitchDegrees: 0,
+                                            rollDegrees: -14.9,
+                                            orientation: .landscapeRight))
+        XCTAssertNil(IRSensor.motionDegrees(inversePitchRadians: 0,
+                                            inverseRollRadians: 0,
+                                            pitchDegrees: 0,
+                                            rollDegrees: 0,
+                                            orientation: .unknown))
     }
 }

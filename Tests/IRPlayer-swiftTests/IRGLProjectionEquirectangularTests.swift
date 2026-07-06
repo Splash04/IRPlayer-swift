@@ -176,6 +176,18 @@ final class IRGLProjectionEquirectangularTests: XCTestCase {
         XCTAssertFalse(updatedMesh.indices.isEmpty)
     }
 
+    func testProjectionUpdateIgnoresNonFisheyeParameter() throws {
+        let projection = IRGLProjectionEquirectangular(textureWidth: 1440, height: 1080, centerX: 720, centerY: 540, radius: 520)
+        let firstMesh = try XCTUnwrap(projection.exportMesh())
+
+        projection.update(with: IRMediaParameter(width: 320, height: 180))
+        let updatedMesh = try XCTUnwrap(projection.exportMesh())
+
+        XCTAssertEqual(firstMesh.positions.count, updatedMesh.positions.count)
+        XCTAssertEqual(firstMesh.texcoords.count, updatedMesh.texcoords.count)
+        XCTAssertEqual(firstMesh.indices.count, updatedMesh.indices.count)
+    }
+
     func testProjectionNoOpUpdateAndDrawKeepMeshAvailable() throws {
         let projection = IRGLProjectionEquirectangular(textureWidth: 1440,
                                                       height: 1080,

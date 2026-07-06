@@ -6,6 +6,7 @@
 //
 
 import XCTest
+import Photos
 @testable import IRPlayer_swift
 
 final class IRPhotoSaverTests: XCTestCase {
@@ -38,5 +39,51 @@ final class IRPhotoSaverTests: XCTestCase {
         }
 
         XCTAssertEqual(wrapperOutput, policyOutput)
+    }
+
+    func testPhotoLibraryAccessIsGrantedForAuthorizedAndLimitedStatusesOnly() {
+        XCTAssertTrue(IRPhotoSaverPolicy.photoLibraryAccessIsGranted(.authorized))
+        XCTAssertTrue(IRPhotoSaverPolicy.photoLibraryAccessIsGranted(.limited))
+        XCTAssertFalse(IRPhotoSaverPolicy.photoLibraryAccessIsGranted(.denied))
+        XCTAssertFalse(IRPhotoSaverPolicy.photoLibraryAccessIsGranted(.restricted))
+        XCTAssertFalse(IRPhotoSaverPolicy.photoLibraryAccessIsGranted(.notDetermined))
+    }
+
+    func testPhotoLibraryAccessWrapperMatchesPolicy() {
+        XCTAssertEqual(
+            IRPhotoSaver.photoLibraryAccessIsGranted(.authorized),
+            IRPhotoSaverPolicy.photoLibraryAccessIsGranted(.authorized)
+        )
+        XCTAssertEqual(
+            IRPhotoSaver.photoLibraryAccessIsGranted(.denied),
+            IRPhotoSaverPolicy.photoLibraryAccessIsGranted(.denied)
+        )
+    }
+
+    func testSaveDestinationUsesLibraryWhenAlbumNameIsMissing() {
+        XCTAssertEqual(IRPhotoSaverPolicy.saveDestination(albumName: nil), .library)
+        XCTAssertEqual(IRPhotoSaver.saveDestination(albumName: nil), .library)
+    }
+
+    func testSaveDestinationUsesAlbumWhenNameIsProvided() {
+        XCTAssertEqual(IRPhotoSaverPolicy.saveDestination(albumName: "Snapshots"), .album("Snapshots"))
+        XCTAssertEqual(IRPhotoSaver.saveDestination(albumName: "Snapshots"), .album("Snapshots"))
+    }
+
+    func testCreatedAlbumIdentifierRequiresSuccessAndPlaceholderID() {
+        XCTAssertNil(
+            IRPhotoSaverPolicy.createdAlbumIdentifier(success: false, placeholderLocalIdentifier: "album-id")
+        )
+        XCTAssertNil(
+            IRPhotoSaverPolicy.createdAlbumIdentifier(success: true, placeholderLocalIdentifier: nil)
+        )
+        XCTAssertEqual(
+            IRPhotoSaverPolicy.createdAlbumIdentifier(success: true, placeholderLocalIdentifier: "album-id"),
+            "album-id"
+        )
+        XCTAssertEqual(
+            IRPhotoSaver.createdAlbumIdentifier(success: true, placeholderLocalIdentifier: "album-id"),
+            "album-id"
+        )
     }
 }

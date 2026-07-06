@@ -60,6 +60,14 @@ final class IRGLProgram2DTests: XCTestCase {
         XCTAssertEqual(program.getOutputSize(), CGSize(width: 640, height: 360))
     }
 
+    func testOutputSizeDefaultsToZeroWhenShaderParamsAreMissing() {
+        let program = IRGLProgram2D()
+
+        program.shaderParams2D = nil
+
+        XCTAssertEqual(program.getOutputSize(), .zero)
+    }
+
     func testCalculateViewportReturnsZeroWithoutTransformController() {
         let program = IRGLProgram2D(
             pixelFormat: .RGB_IRPixelFormat,
@@ -68,6 +76,45 @@ final class IRGLProgram2DTests: XCTestCase {
         )
 
         XCTAssertEqual(program.calculateViewport(), .zero)
+    }
+
+    func testCalculateViewportOffsetsShrunkenTransformInsideViewport() {
+        let program = IRGLProgram2D(
+            pixelFormat: .RGB_IRPixelFormat,
+            viewportRange: CGRect(x: 10, y: 20, width: 100, height: 80),
+            parameter: nil
+        )
+        program.tramsformController = RecordingTransformController(scope: IRGLScope2D(scaleX: 0.5,
+                                                                                      scaleY: 0.25,
+                                                                                      offsetX: 0,
+                                                                                      offsetY: 0,
+                                                                                      panDegree: 0,
+                                                                                      w: 200,
+                                                                                      h: 100))
+
+        let viewport = program.calculateViewport()
+
+        XCTAssertEqual(viewport.origin.x, -40, accuracy: 0.0001)
+        XCTAssertEqual(viewport.origin.y, -17.5, accuracy: 0.0001)
+        XCTAssertEqual(viewport.size.width, 100, accuracy: 0.0001)
+        XCTAssertEqual(viewport.size.height, 80, accuracy: 0.0001)
+    }
+
+    func testCalculateViewportKeepsOriginForFullScaleTransform() {
+        let program = IRGLProgram2D(
+            pixelFormat: .RGB_IRPixelFormat,
+            viewportRange: CGRect(x: 10, y: 20, width: 100, height: 80),
+            parameter: nil
+        )
+        program.tramsformController = RecordingTransformController(scope: IRGLScope2D(scaleX: 1.25,
+                                                                                      scaleY: 1,
+                                                                                      offsetX: 0,
+                                                                                      offsetY: 0,
+                                                                                      panDegree: 0,
+                                                                                      w: 200,
+                                                                                      h: 100))
+
+        XCTAssertEqual(program.calculateViewport(), CGRect(x: 10, y: 20, width: 100, height: 80))
     }
 
     func testViewportSizeRejectsNonFiniteOrOverflowingDimensions() {
@@ -198,6 +245,44 @@ final class IRGLProgram2DTests: XCTestCase {
         XCTAssertEqual(defaultScale.y, 1, accuracy: 0.0001)
     }
 
+    func testOutputSizeUpdateScalesTransformAndUpdatesToDefault() {
+        let program = IRGLProgram2D()
+        let transformController = RecordingTransformController(scope: IRGLScope2D(scaleX: 1,
+                                                                                  scaleY: 1,
+                                                                                  offsetX: 0,
+                                                                                  offsetY: 0,
+                                                                                  panDegree: 0,
+                                                                                  w: 100,
+                                                                                  h: 100))
+        program.tramsformController = transformController
+
+        program.didUpdateOutputWH(400, 200)
+
+        let defaultScale = transformController.getDefaultTransformScale()
+        XCTAssertEqual(defaultScale.x, 1, accuracy: 0.0001)
+        XCTAssertEqual(defaultScale.y, 0.5, accuracy: 0.0001)
+        XCTAssertEqual(transformController.updateToDefaultCallCount, 1)
+    }
+
+    func testOutputSizeUpdateCanSkipDefaultTransformUpdate() {
+        let program = IRGLProgram2D()
+        let transformController = RecordingTransformController(scope: IRGLScope2D(scaleX: 1,
+                                                                                  scaleY: 1,
+                                                                                  offsetX: 0,
+                                                                                  offsetY: 0,
+                                                                                  panDegree: 0,
+                                                                                  w: 100,
+                                                                                  h: 100))
+        program.tramsformController = transformController
+
+        program.didUpdateOutputWH(100, 100)
+
+        let defaultScale = transformController.getDefaultTransformScale()
+        XCTAssertEqual(defaultScale.x, 1, accuracy: 0.0001)
+        XCTAssertEqual(defaultScale.y, 1, accuracy: 0.0001)
+        XCTAssertEqual(transformController.updateToDefaultCallCount, 0)
+    }
+
     func testGestureMethodsForwardToTransformController() {
         let program = IRGLProgram2D()
         let transformController = RecordingTransformController(scope: IRGLScope2D(scaleX: 2,
@@ -260,6 +345,18 @@ final class IRGLProgram2DTests: XCTestCase {
         program.shouldUpdateToDefaultWhenOutputSizeChanged = false
         program.setRenderFrame(frame)
         XCTAssertFalse(program.shouldUpdateToDefaultWhenOutputSizeChanged)
+    }
+
+    func testSetRenderFrameIgnoresMissingShaderParams() {
+        let program = IRGLProgram2D()
+        let frame = IRFFVideoFrame()
+        frame.width = 320
+        frame.height = 180
+
+        program.shaderParams2D = nil
+        program.setRenderFrame(frame)
+
+        XCTAssertNil(program.shaderParams2D)
     }
 }
 
