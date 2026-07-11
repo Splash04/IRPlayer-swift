@@ -3,6 +3,49 @@ import XCTest
 
 final class IRFFFramePoolTests: XCTestCase {
 
+    private final class DelegateSpy: NSObject, IRFFFrameDelegate {
+        private(set) var startedFrame: IRFFFrame?
+        private(set) var stoppedFrame: IRFFFrame?
+        private(set) var canceledFrame: IRFFFrame?
+
+        func frameDidStartPlaying(_ frame: IRFFFrame) {
+            startedFrame = frame
+        }
+
+        func frameDidStopPlaying(_ frame: IRFFFrame) {
+            stoppedFrame = frame
+        }
+
+        func frameDidCancel(_ frame: IRFFFrame) {
+            canceledFrame = frame
+        }
+    }
+
+    func testSubtitleAndArtworkFramesReportSpecializedTypes() {
+        let artwork = IRFFArtworkFrame()
+        let picture = Data([1, 2, 3])
+
+        artwork.picture = picture
+
+        XCTAssertEqual(IRFFSubtitleFrame().type, .subtitle)
+        XCTAssertEqual(artwork.type, .artwork)
+        XCTAssertEqual(artwork.picture, picture)
+    }
+
+    func testFrameCancelClearsPlayingAndNotifiesDelegate() {
+        let frame = IRFFFrame()
+        let delegate = DelegateSpy()
+        frame.delegate = delegate
+
+        frame.startPlaying()
+        frame.cancel()
+
+        XCTAssertFalse(frame.playing)
+        XCTAssertTrue(delegate.startedFrame === frame)
+        XCTAssertTrue(delegate.canceledFrame === frame)
+        XCTAssertNil(delegate.stoppedFrame)
+    }
+
     func testDefaultPoolsCreateExpectedFrameTypesWithoutModuleNameLookup() {
         let videoFrame = IRFFFramePool.videoPool().getUnuseFrame()
         let audioFrame = IRFFFramePool.audioPool().getUnuseFrame()
@@ -70,6 +113,7 @@ final class IRFFFramePoolTests: XCTestCase {
         pool.flush()
 
         XCTAssertNil(pool.playingFrame)
+        XCTAssertFalse(playingFrame.playing)
         XCTAssertEqual(pool.usedCount, 0)
         XCTAssertEqual(pool.unuseCount, 2)
         XCTAssertEqual(pool.count, 2)
@@ -85,6 +129,7 @@ final class IRFFFramePoolTests: XCTestCase {
         pool.setFrameUnuse(frame)
 
         XCTAssertNil(pool.playingFrame)
+        XCTAssertFalse(frame.playing)
         XCTAssertEqual(pool.usedCount, 0)
         XCTAssertEqual(pool.unuseCount, 1)
     }
@@ -102,5 +147,26 @@ final class IRFFFramePoolTests: XCTestCase {
         XCTAssertEqual(pool.unuseCount, 2)
         XCTAssertTrue(pool.unuseFrames.contains(usedFrame))
         XCTAssertTrue(pool.unuseFrames.contains(playingFrame))
+    }
+
+    func testCancelReturnsFrameForReuseAndStartingNewFrameReleasesPreviousPlayingFrame() throws {
+        let pool = IRFFFramePool.pool(withCapacity: 2, frameClassName: IRFFFrame.self)
+        let firstFrame = try XCTUnwrap(pool.getUnuseFrame())
+
+        firstFrame.cancel()
+        XCTAssertEqual(pool.unuseCount, 1)
+        XCTAssertEqual(pool.usedCount, 0)
+
+        let reusedFrame = try XCTUnwrap(pool.getUnuseFrame())
+        XCTAssertTrue(reusedFrame === firstFrame)
+        reusedFrame.startPlaying()
+
+        let secondFrame = try XCTUnwrap(pool.getUnuseFrame())
+        secondFrame.startPlaying()
+
+        XCTAssertTrue(pool.playingFrame === secondFrame)
+        XCTAssertTrue(pool.unuseFrames.contains(reusedFrame))
+        XCTAssertFalse(reusedFrame.playing)
+        XCTAssertEqual(pool.usedCount, 0)
     }
 }

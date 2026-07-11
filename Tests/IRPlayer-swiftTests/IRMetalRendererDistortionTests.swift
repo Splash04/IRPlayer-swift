@@ -5,10 +5,49 @@
 //  Created by Codex on 2026/6/2.
 //
 
+import Metal
+import QuartzCore
 import XCTest
 @testable import IRPlayer_swift
 
 final class IRMetalRendererDistortionTests: XCTestCase {
+
+    private func makeMetalDevice() throws -> MTLDevice {
+        guard let device = MTLCreateSystemDefaultDevice() else {
+            throw XCTSkip("Metal device unavailable")
+        }
+        return device
+    }
+
+    private func makeRenderer() throws -> IRMetalRenderer {
+        guard let renderer = IRMetalRenderer(device: try makeMetalDevice()) else {
+            throw XCTSkip("Metal renderer unavailable")
+        }
+        return renderer
+    }
+
+    private func makeOffscreenDrawable(renderer: IRMetalRenderer,
+                                       width: Int = 4,
+                                       height: Int = 4) throws -> IRDistortionTestMetalDrawable {
+        let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm,
+                                                                  width: width,
+                                                                  height: height,
+                                                                  mipmapped: false)
+        descriptor.usage = [.renderTarget, .shaderRead]
+        guard let texture = renderer.device.makeTexture(descriptor: descriptor) else {
+            throw XCTSkip("Offscreen Metal drawable texture unavailable")
+        }
+        return IRDistortionTestMetalDrawable(texture: texture)
+    }
+
+    private func makeRGBFrame(width: Int = 2, height: Int = 2) -> IRVideoFrameRGB {
+        let bytesPerRow = width * 4
+        let frame = IRVideoFrameRGB(linesize: UInt(bytesPerRow),
+                                    rgb: Data(repeating: 0xff, count: bytesPerRow * height))
+        frame.width = width
+        frame.height = height
+        return frame
+    }
 
     func testDistortionTextureSizeRejectsInvalidOrOverflowingSizes() {
         XCTAssertNil(IRMetalRenderer.distortionTextureSize(from: CGSize(width: 0, height: 10)))
@@ -62,5 +101,99 @@ final class IRMetalRendererDistortionTests: XCTestCase {
         XCTAssertEqual(wrapper.right.width, policy.right.width)
         XCTAssertEqual(wrapper.right.height, policy.right.height)
         XCTAssertNil(IRMetalRendererDistortionPolicy.distortionScissorRects(drawableSize: CGSize(width: -1, height: 50)))
+    }
+
+    func testRenderDistortionDrawsValidRGBFrame() throws {
+        let renderer = try makeRenderer()
+        guard renderer.pipelineRGB != nil,
+              renderer.pipelineDistortion != nil else {
+            throw XCTSkip("Metal RGB distortion pipelines unavailable")
+        }
+        let drawable = try makeOffscreenDrawable(renderer: renderer)
+        let leftMesh = try XCTUnwrap(IRMetalDistortionMesh(device: renderer.device, modelType: .left))
+        let rightMesh = try XCTUnwrap(IRMetalDistortionMesh(device: renderer.device, modelType: .right))
+
+        XCTAssertTrue(renderer.renderDistortion(frame: makeRGBFrame(),
+                                                leftMesh: leftMesh,
+                                                rightMesh: rightMesh,
+                                                to: drawable,
+                                                drawableSize: CGSize(width: 4, height: 4),
+                                                contentMode: .scaleAspectFit))
+        XCTAssertEqual(renderer.distortionOffscreenTexture?.width, 4)
+        XCTAssertEqual(renderer.distortionOffscreenTexture?.height, 4)
+    }
+
+    func testRenderDistortionRejectsUnsupportedFrameAfterOffscreenPass() throws {
+        let renderer = try makeRenderer()
+        let drawable = try makeOffscreenDrawable(renderer: renderer)
+        let leftMesh = try XCTUnwrap(IRMetalDistortionMesh(device: renderer.device, modelType: .left))
+        let rightMesh = try XCTUnwrap(IRMetalDistortionMesh(device: renderer.device, modelType: .right))
+
+        XCTAssertFalse(renderer.renderDistortion(frame: IRFFVideoFrame(),
+                                                 leftMesh: leftMesh,
+                                                 rightMesh: rightMesh,
+                                                 to: drawable,
+                                                 drawableSize: CGSize(width: 4, height: 4),
+                                                 contentMode: .scaleAspectFit))
+        XCTAssertEqual(renderer.distortionOffscreenTexture?.width, 4)
+        XCTAssertEqual(renderer.distortionOffscreenTexture?.height, 4)
+    }
+
+    func testRenderDistortionReusesOffscreenTextureForSameDrawableSize() throws {
+        let renderer = try makeRenderer()
+        guard renderer.pipelineRGB != nil,
+              renderer.pipelineDistortion != nil else {
+            throw XCTSkip("Metal RGB distortion pipelines unavailable")
+        }
+        let drawable = try makeOffscreenDrawable(renderer: renderer)
+        let leftMesh = try XCTUnwrap(IRMetalDistortionMesh(device: renderer.device, modelType: .left))
+        let rightMesh = try XCTUnwrap(IRMetalDistortionMesh(device: renderer.device, modelType: .right))
+        let frame = makeRGBFrame()
+
+        XCTAssertTrue(renderer.renderDistortion(frame: frame,
+                                                leftMesh: leftMesh,
+                                                rightMesh: rightMesh,
+                                                to: drawable,
+                                                drawableSize: CGSize(width: 4, height: 4),
+                                                contentMode: .scaleAspectFit))
+        let firstTexture = try XCTUnwrap(renderer.distortionOffscreenTexture)
+
+        XCTAssertTrue(renderer.renderDistortion(frame: frame,
+                                                leftMesh: leftMesh,
+                                                rightMesh: rightMesh,
+                                                to: drawable,
+                                                drawableSize: CGSize(width: 4, height: 4),
+                                                contentMode: .scaleAspectFit))
+        let secondTexture = try XCTUnwrap(renderer.distortionOffscreenTexture)
+
+        XCTAssertTrue(firstTexture === secondTexture)
+    }
+}
+
+private final class IRDistortionTestMetalDrawable: NSObject, CAMetalDrawable {
+    let texture: MTLTexture
+    let layer = CAMetalLayer()
+
+    init(texture: MTLTexture) {
+        self.texture = texture
+        super.init()
+    }
+
+    func present() {}
+
+    func present(at presentationTime: CFTimeInterval) {
+        present()
+    }
+
+    @objc func presentAfterMinimumDuration(_ duration: CFTimeInterval) {
+        present()
+    }
+
+    @objc func addPresentScheduledHandler(_ block: @escaping (MTLDrawable) -> Void) {
+        block(self)
+    }
+
+    @objc func addPresentedHandler(_ block: @escaping (MTLDrawable) -> Void) {
+        block(self)
     }
 }

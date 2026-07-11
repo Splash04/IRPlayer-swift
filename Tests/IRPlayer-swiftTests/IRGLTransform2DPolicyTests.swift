@@ -16,6 +16,17 @@ final class IRGLTransform2DPolicyTests: XCTestCase {
         XCTAssertEqual(expanded.defaultScaleY, 1.3, accuracy: 0.0001)
     }
 
+    func testScaleRangeExpansionUsesUnitDefaultsWhenRangeIsMissing() {
+        let expanded = IRGLTransform2DPolicy.expandedScaleRange(nil, defaultScaleX: 3, defaultScaleY: 2)
+
+        XCTAssertEqual(expanded.minScaleX, 1, accuracy: 0.0001)
+        XCTAssertEqual(expanded.minScaleY, 1, accuracy: 0.0001)
+        XCTAssertEqual(expanded.maxScaleX, 3, accuracy: 0.0001)
+        XCTAssertEqual(expanded.maxScaleY, 2, accuracy: 0.0001)
+        XCTAssertEqual(expanded.defaultScaleX, 1, accuracy: 0.0001)
+        XCTAssertEqual(expanded.defaultScaleY, 1, accuracy: 0.0001)
+    }
+
     func testDegreeScrollUnitsUseContentSizeAndWideDegree() {
         XCTAssertEqual(
             IRGLTransform2DPolicy.degreeScrollUnits(width: 100, height: 80, scaleX: 2, scaleY: 3, range: IRGLScopeRange(minLat: -20, maxLat: 20, minLng: -50, maxLng: 50, defaultLat: 0, defaultLng: 0)),
@@ -54,6 +65,36 @@ final class IRGLTransform2DPolicyTests: XCTestCase {
         XCTAssertEqual(clamped.offsetY, 37.5, accuracy: 0.0001)
     }
 
+    func testUpdateDecisionNormalizesSubUnitScaleByDominantAxis() throws {
+        let scope = IRGLTransform2DPolicy.Scope(width: 100, height: 80, scaleX: 2, scaleY: 4, offsetX: 0, offsetY: 0)
+
+        let xDominant = try XCTUnwrap(IRGLTransform2DPolicy.updateDecision(scope: scope, fx: 0, fy: 0, sx: 0.5, sy: 0.8, scaleRange: nil))
+        XCTAssertEqual(xDominant.scaleX, 0.5, accuracy: 0.0001)
+        XCTAssertEqual(xDominant.scaleY, 1, accuracy: 0.0001)
+
+        let yDominant = try XCTUnwrap(IRGLTransform2DPolicy.updateDecision(scope: scope, fx: 0, fy: 0, sx: 0.8, sy: 0.5, scaleRange: nil))
+        XCTAssertEqual(yDominant.scaleX, 1, accuracy: 0.0001)
+        XCTAssertEqual(yDominant.scaleY, 2, accuracy: 0.0001)
+    }
+
+    func testUpdateDecisionClampsOversizedScaleByDominantAxis() throws {
+        let scope = IRGLTransform2DPolicy.Scope(width: 100, height: 80, scaleX: 2, scaleY: 4, offsetX: 0, offsetY: 0)
+        let range = IRGLScaleRange(minScaleX: 1, minScaleY: 1, maxScaleX: 3, maxScaleY: 5, defaultScaleX: 1, defaultScaleY: 1)
+
+        let xDominant = try XCTUnwrap(IRGLTransform2DPolicy.updateDecision(scope: scope, fx: 0, fy: 0, sx: 8, sy: 10, scaleRange: range))
+
+        XCTAssertEqual(xDominant.scaleX, 2.5, accuracy: 0.0001)
+        XCTAssertEqual(xDominant.scaleY, 5, accuracy: 0.0001)
+
+        let nilRangeXDominant = try XCTUnwrap(IRGLTransform2DPolicy.updateDecision(scope: scope, fx: 0, fy: 0, sx: 8, sy: 10, scaleRange: nil))
+        XCTAssertEqual(nilRangeXDominant.scaleX, 0.5, accuracy: 0.0001)
+        XCTAssertEqual(nilRangeXDominant.scaleY, 1, accuracy: 0.0001)
+
+        let nilRangeYDominant = try XCTUnwrap(IRGLTransform2DPolicy.updateDecision(scope: scope, fx: 0, fy: 0, sx: 10, sy: 8, scaleRange: nil))
+        XCTAssertEqual(nilRangeYDominant.scaleX, 1, accuracy: 0.0001)
+        XCTAssertEqual(nilRangeYDominant.scaleY, 2, accuracy: 0.0001)
+    }
+
     func testScrollDecisionClampsOffsetsAndReportsStatus() throws {
         let decision = try XCTUnwrap(IRGLTransform2DPolicy.scrollDecision(offsetX: 25, offsetY: 25, scaleX: 2, scaleY: 2, maxX0: 50, maxY0: 50, dx: 1_000, dy: -1_000))
 
@@ -61,6 +102,15 @@ final class IRGLTransform2DPolicyTests: XCTestCase {
         XCTAssertEqual(decision.offsetY, 0, accuracy: 0.0001)
         XCTAssertTrue(decision.status.contains(.toMaxX))
         XCTAssertTrue(decision.status.contains(.toMinY))
+    }
+
+    func testScrollDecisionReportsMinimumXAndMaximumYBounds() throws {
+        let decision = try XCTUnwrap(IRGLTransform2DPolicy.scrollDecision(offsetX: 25, offsetY: 25, scaleX: 2, scaleY: 2, maxX0: 50, maxY0: 50, dx: -1_000, dy: 1_000))
+
+        XCTAssertEqual(decision.offsetX, 0, accuracy: 0.0001)
+        XCTAssertEqual(decision.offsetY, 50, accuracy: 0.0001)
+        XCTAssertTrue(decision.status.contains(.toMinX))
+        XCTAssertTrue(decision.status.contains(.toMaxY))
     }
 
     func testScrollDecisionRejectsInvalidInputs() {
@@ -77,6 +127,20 @@ final class IRGLTransform2DPolicyTests: XCTestCase {
         XCTAssertEqual(decision.maxY0, 75, accuracy: 0.0001)
         XCTAssertEqual(decision.offsetX, 50, accuracy: 0.0001)
         XCTAssertEqual(decision.offsetY, 10, accuracy: 0.0001)
+    }
+
+    func testResizeDecisionRejectsInvalidInputs() {
+        XCTAssertNil(IRGLTransform2DPolicy.resizeDecision(width: 0, height: 100, scaleX: 1, scaleY: 1, offsetX: 0, offsetY: 0, oldRW: 1, oldRH: 1))
+        XCTAssertNil(IRGLTransform2DPolicy.resizeDecision(width: 100, height: 100, scaleX: 1, scaleY: 1, offsetX: .nan, offsetY: 0, oldRW: 1, oldRH: 1))
+    }
+
+    func testResizeDecisionUsesZeroBoundsForSubUnitScale() throws {
+        let decision = try XCTUnwrap(IRGLTransform2DPolicy.resizeDecision(width: 100, height: 100, scaleX: 0.5, scaleY: 0.75, offsetX: 10, offsetY: 20, oldRW: 0.01, oldRH: 0.02))
+
+        XCTAssertEqual(decision.maxX0, 0, accuracy: 0.0001)
+        XCTAssertEqual(decision.maxY0, 0, accuracy: 0.0001)
+        XCTAssertEqual(decision.rW, 0.005, accuracy: 0.0001)
+        XCTAssertEqual(decision.rH, 0.0075, accuracy: 0.0001)
     }
 }
 

@@ -143,6 +143,20 @@ class IRFFVideoDecoder {
         )
     }
 
+    static func packetQueueFallbackDuration(packetDuration: Int64,
+                                            packetSize: Int32,
+                                            isFlushPacket: Bool,
+                                            timebase: TimeInterval,
+                                            fps: TimeInterval) -> TimeInterval {
+        return IRFFVideoDecoderPolicy.packetQueueFallbackDuration(
+            packetDuration: packetDuration,
+            packetSize: packetSize,
+            isFlushPacket: isFlushPacket,
+            timebase: timebase,
+            fps: fps
+        )
+    }
+
     func getFrameSync() -> IRFFVideoFrame? {
         return frameQueue.getFrameSync() as? IRFFVideoFrame
     }
@@ -152,10 +166,13 @@ class IRFFVideoDecoder {
     }
 
     func putPacket(_ packet: AVPacket) {
-        var duration: TimeInterval = 0
-        if packet.duration <= 0 && packet.size > 0 && packet.data != IRFFVideoDecoder.flushPacket.data {
-            duration = Self.frameDuration(ticks: 0, repeatPicture: 0, timebase: timebase, fps: fps)
-        }
+        let duration = Self.packetQueueFallbackDuration(
+            packetDuration: packet.duration,
+            packetSize: packet.size,
+            isFlushPacket: packet.data == IRFFVideoDecoder.flushPacket.data,
+            timebase: timebase,
+            fps: fps
+        )
         packetQueue.putPacket(packet, duration: duration)
     }
 

@@ -39,6 +39,10 @@ final class IRGLProjectionEquirectangularTests: XCTestCase {
             IRGLProjectionEquirectangular.indexValue(Int(Int16.max)),
             IRGLProjectionEquirectangularPolicy.indexValue(Int(Int16.max))
         )
+        XCTAssertEqual(
+            IRGLProjectionEquirectangular.isValidGeometry(tw: 1440, th: 1080, cr: 520, cx: 720, cy: 540),
+            IRGLProjectionEquirectangularPolicy.isValidGeometry(tw: 1440, th: 1080, cr: 520, cx: 720, cy: 540)
+        )
     }
 
     func testElementCountRejectsInvalidOrOverflowingInputs() {
@@ -117,9 +121,34 @@ final class IRGLProjectionEquirectangularTests: XCTestCase {
         XCTAssertEqual(output, "")
     }
 
+    func testProjectionRejectsNonFiniteGeometryWithoutDebugOutput() {
+        let output = captureStandardOutput {
+            let projection = IRGLProjectionEquirectangular(textureWidth: .nan,
+                                                          height: 1080,
+                                                          centerX: 720,
+                                                          centerY: 540,
+                                                          radius: 520)
+
+            XCTAssertNil(projection.exportMesh())
+            XCTAssertFalse(IRGLProjectionEquirectangular.isValidGeometry(tw: 1440,
+                                                                         th: .infinity,
+                                                                         cr: 520,
+                                                                         cx: 720,
+                                                                         cy: 540))
+            XCTAssertFalse(IRGLProjectionEquirectangular.isValidGeometry(tw: 1440,
+                                                                         th: 1080,
+                                                                         cr: .nan,
+                                                                         cx: 720,
+                                                                         cy: 540))
+        }
+
+        XCTAssertEqual(output, "")
+    }
+
     func testBufferPlanRejectsOverflowWithoutDebugOutput() {
         let output = captureStandardOutput {
             XCTAssertNil(IRGLProjectionEquirectangular.bufferPlan(slices: Int.max, indicesPerVertex: 1))
+            XCTAssertNil(IRGLProjectionEquirectangular.bufferPlan(slices: 3_037_000_499, indicesPerVertex: 1))
         }
 
         XCTAssertEqual(output, "")
@@ -145,5 +174,33 @@ final class IRGLProjectionEquirectangularTests: XCTestCase {
         XCTAssertFalse(updatedMesh.positions.isEmpty)
         XCTAssertFalse(updatedMesh.texcoords.isEmpty)
         XCTAssertFalse(updatedMesh.indices.isEmpty)
+    }
+
+    func testProjectionUpdateIgnoresNonFisheyeParameter() throws {
+        let projection = IRGLProjectionEquirectangular(textureWidth: 1440, height: 1080, centerX: 720, centerY: 540, radius: 520)
+        let firstMesh = try XCTUnwrap(projection.exportMesh())
+
+        projection.update(with: IRMediaParameter(width: 320, height: 180))
+        let updatedMesh = try XCTUnwrap(projection.exportMesh())
+
+        XCTAssertEqual(firstMesh.positions.count, updatedMesh.positions.count)
+        XCTAssertEqual(firstMesh.texcoords.count, updatedMesh.texcoords.count)
+        XCTAssertEqual(firstMesh.indices.count, updatedMesh.indices.count)
+    }
+
+    func testProjectionNoOpUpdateAndDrawKeepMeshAvailable() throws {
+        let projection = IRGLProjectionEquirectangular(textureWidth: 1440,
+                                                      height: 1080,
+                                                      centerX: 720,
+                                                      centerY: 540,
+                                                      radius: 520)
+
+        projection.updateVertex()
+        projection.draw()
+
+        let mesh = try XCTUnwrap(projection.exportMesh())
+        XCTAssertFalse(mesh.positions.isEmpty)
+        XCTAssertFalse(mesh.texcoords.isEmpty)
+        XCTAssertFalse(mesh.indices.isEmpty)
     }
 }

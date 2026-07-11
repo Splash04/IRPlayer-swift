@@ -62,6 +62,21 @@ final class IRGLTransformController3DFisheyeTests: XCTestCase {
         XCTAssertTrue(delegate.didScrollStatuses.last?.contains(.toMaxY) == true)
     }
 
+    func testScrollRespectsDelegateVerticalAxisDecision() {
+        let controller = IRGLTransformController3DFisheye(viewportWidth: 100, viewportHeight: 100, tileType: .up)
+        let delegate = FisheyeTransformDelegateSpy()
+        delegate.allowVertical = false
+        controller.delegate = delegate
+        let scope = controller.getScope()
+
+        controller.scroll(dx: -1_000, dy: -1_000)
+
+        XCTAssertEqual(scope.lng, 75, accuracy: 0.0001)
+        XCTAssertEqual(scope.lat, 0, accuracy: 0.0001)
+        XCTAssertTrue(delegate.didScrollStatuses.last?.contains(.toMaxX) == true)
+        XCTAssertFalse(delegate.didScrollStatuses.last?.contains(.toMaxY) == true)
+    }
+
     func testRotateOnlyUpdatesUpTilt() {
         let upController = IRGLTransformController3DFisheye(viewportWidth: 100, viewportHeight: 100, tileType: .up)
         let towardController = IRGLTransformController3DFisheye(viewportWidth: 100, viewportHeight: 100, tileType: .toward)
@@ -71,6 +86,28 @@ final class IRGLTransformController3DFisheyeTests: XCTestCase {
 
         XCTAssertEqual(upController.getScope().panDegree, 30, accuracy: 0.0001)
         XCTAssertEqual(towardController.getScope().panDegree, 0, accuracy: 0.0001)
+    }
+
+    func testSetupTiltAcceptsUnknownTiltWithoutChangingPanDegree() {
+        let controller = IRGLTransformController3DFisheye(viewportWidth: 100, viewportHeight: 100, tileType: .up)
+        controller.rotate(degree: 30)
+
+        controller.setupTilt(.unknown)
+
+        XCTAssertEqual(controller.getScope().tiltType, .unknown)
+        XCTAssertEqual(controller.getScope().panDegree, 30, accuracy: 0.0001)
+    }
+
+    func testResetViewportRestoresDefaultTiltAfterTemporaryTiltChange() {
+        let controller = IRGLTransformController3DFisheye(viewportWidth: 100, viewportHeight: 100, tileType: .up)
+        controller.setupTilt(.toward)
+
+        controller.resetViewport(width: 120, height: 80, resetTransform: true)
+
+        XCTAssertEqual(controller.getScope().tiltType, .up)
+        XCTAssertEqual(controller.getScope().w, 120)
+        XCTAssertEqual(controller.getScope().h, 80)
+        assertFinite(controller.getModelViewProjectionMatrix())
     }
 
     func testResetViewportToZeroSizeKeepsMatrixFinite() {
@@ -89,6 +126,42 @@ final class IRGLTransformController3DFisheyeTests: XCTestCase {
         assertFinite(controller.getModelViewProjectionMatrix())
         XCTAssertEqual(controller.getScope().scaleX, 1, accuracy: 0.0001)
         XCTAssertEqual(controller.getScope().scaleY, 1, accuracy: 0.0001)
+    }
+
+    func testDefaultScaleAndDegreeScrollUpdateFisheyeScope() {
+        let controller = IRGLTransformController3DFisheye(viewportWidth: 100, viewportHeight: 100, tileType: .up)
+        controller.scaleRange = IRGLScaleRange(minScaleX: 1,
+                                               minScaleY: 1,
+                                               maxScaleX: 4,
+                                               maxScaleY: 4,
+                                               defaultScaleX: 2,
+                                               defaultScaleY: 2)
+
+        controller.updateToDefault()
+        let defaultScale = controller.getDefaultTransformScale()
+        controller.scroll(degreeX: 15, degreeY: -6)
+
+        XCTAssertEqual(defaultScale.x, 1, accuracy: 0.0001)
+        XCTAssertEqual(defaultScale.y, 1, accuracy: 0.0001)
+        XCTAssertEqual(controller.getScope().scaleX, 2, accuracy: 0.0001)
+        XCTAssertEqual(controller.getScope().scaleY, 2, accuracy: 0.0001)
+        XCTAssertEqual(controller.getScope().lng, -15, accuracy: 0.0001)
+        XCTAssertEqual(controller.getScope().lat, 6, accuracy: 0.0001)
+        assertFinite(controller.getModelViewProjectionMatrix())
+    }
+
+    func testNilRangesFallBackToZeroDefaultsAndUnitScale() {
+        let controller = IRGLTransformController3DFisheye(viewportWidth: 100, viewportHeight: 100, tileType: .toward)
+
+        controller.scopeRange = nil
+        controller.scaleRange = nil
+        controller.resetViewport(width: 120, height: 80, resetTransform: true)
+
+        XCTAssertEqual(controller.getScope().lat, 0, accuracy: 0.0001)
+        XCTAssertEqual(controller.getScope().lng, 0, accuracy: 0.0001)
+        XCTAssertEqual(controller.getScope().scaleX, 1, accuracy: 0.0001)
+        XCTAssertEqual(controller.getScope().scaleY, 1, accuracy: 0.0001)
+        assertFinite(controller.getModelViewProjectionMatrix())
     }
 
     func testScrollIgnoresNonFiniteDeltas() {

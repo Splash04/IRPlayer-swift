@@ -27,10 +27,19 @@ enum IRFFVideoToolBoxPolicy {
               demuxSize > 0,
               packetSize > 0,
               packetSize <= demuxSize else { return nil }
+        let customBlockSource = CMBlockBufferCustomBlockSource(
+            version: kCMBlockBufferCustomBlockSourceVersion,
+            AllocateBlock: nil,
+            FreeBlock: { _, memoryBlock, _ in
+                av_free(memoryBlock)
+            },
+            refCon: nil
+        )
         return IRFFVideoToolBox.ConvertedNALBlockPayload(
             memoryBlock: memoryBlock,
             blockLength: Int(demuxSize),
-            dataLength: Int(packetSize)
+            dataLength: Int(demuxSize),
+            customBlockSource: customBlockSource
         )
     }
 
@@ -89,13 +98,14 @@ enum IRFFVideoToolBoxPolicy {
     }
 
     static func makeFormatDescriptionExtensions(extradata: UnsafePointer<UInt8>, extradataSize: Int32) -> CFDictionary {
+        let safeExtradataSize = max(0, CFIndex(extradataSize))
         let pixelAspectRatio: [String: Any] = [
             "HorizontalSpacing": 0,
             "VerticalSpacing": 0
         ]
 
         let atoms: [String: Any] = [
-            "avcC": CFDataCreate(nil, extradata, CFIndex(extradataSize)) as Any
+            "avcC": CFDataCreate(nil, extradata, safeExtradataSize) as Data
         ]
 
         let extensions: [String: Any] = [

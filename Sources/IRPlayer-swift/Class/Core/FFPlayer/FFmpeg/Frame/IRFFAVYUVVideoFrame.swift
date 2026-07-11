@@ -43,6 +43,10 @@ import IRFFMpeg
         )
     }
 
+    static func channelBufferSize(for channel: IRYUVChannel, capacities: [Int]) -> Int? {
+        return IRFFAVYUVVideoFramePolicy.channelBufferSize(for: channel, capacities: capacities)
+    }
+
     func setFrameData(_ frame: UnsafePointer<AVFrame>, width: Int, height: Int) {
         let linesizeY = frame.pointee.linesize.0
         let linesizeU = frame.pointee.linesize.1
@@ -76,9 +80,9 @@ import IRFFMpeg
         updateChannelBuffer(for: .chromaB, width: width / 2, height: height / 2, linesize: linesizeU)
         updateChannelBuffer(for: .chromaR, width: width / 2, height: height / 2, linesize: linesizeV)
 
-        copyFrameData(luma, to: &channelPixels[IRYUVChannel.luma.rawValue], linesize: linesizeY, width: width, height: height)
-        copyFrameData(chromaB, to: &channelPixels[IRYUVChannel.chromaB.rawValue], linesize: linesizeU, width: width / 2, height: height / 2)
-        copyFrameData(chromaR, to: &channelPixels[IRYUVChannel.chromaR.rawValue], linesize: linesizeV, width: width / 2, height: height / 2)
+        copyFrameData(luma, to: &channelPixels[IRYUVChannel.luma.rawValue], channel: .luma, linesize: linesizeY, width: width, height: height)
+        copyFrameData(chromaB, to: &channelPixels[IRYUVChannel.chromaB.rawValue], channel: .chromaB, linesize: linesizeU, width: width / 2, height: height / 2)
+        copyFrameData(chromaR, to: &channelPixels[IRYUVChannel.chromaR.rawValue], channel: .chromaR, linesize: linesizeV, width: width / 2, height: height / 2)
         isImageDirty = true
     }
 
@@ -122,7 +126,10 @@ import IRFFMpeg
             return cachedImage
         }
         guard width > 0, height > 0, let pixelFormat else { return nil }
-        guard let image = IRYUVConvertToImage(srcData: channelPixels, srcLinesize: channelLinesize, width: width, height: height, pixelFormat: pixelFormat) else { return nil }
+        let sourcePlanes: [UnsafePointer<UInt8>?] = channelPixels.map { pointer in
+            pointer.map { UnsafePointer($0) }
+        }
+        guard let image = IRYUVConvertToImage(srcData: sourcePlanes, srcLinesize: channelLinesize, width: width, height: height, pixelFormat: pixelFormat) else { return nil }
         cachedImage = image
         isImageDirty = false
         return image
@@ -149,8 +156,9 @@ import IRFFMpeg
         }
     }
 
-    private func copyFrameData(_ source: UnsafePointer<UInt8>, to destination: inout UnsafeMutablePointer<UInt8>?, linesize: Int32, width: Int, height: Int) {
-        IRYUVChannelFilter(source, linesize, width, height, destination, channelPixelsBufferSize[IRYUVChannel.luma.rawValue], 1)
+    private func copyFrameData(_ source: UnsafePointer<UInt8>, to destination: inout UnsafeMutablePointer<UInt8>?, channel: IRYUVChannel, linesize: Int32, width: Int, height: Int) {
+        let bufferSize = Self.channelBufferSize(for: channel, capacities: channelPixelsBufferSize) ?? 0
+        IRYUVChannelFilter(source, linesize, width, height, destination, bufferSize, 1)
     }
 }
 

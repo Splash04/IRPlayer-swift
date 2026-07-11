@@ -262,4 +262,103 @@ final class IRFFAudioDecoderTests: XCTestCase {
         XCTAssertFalse(IRFFAudioDecoder.canUseDirectOutput(sampleFormat: AV_SAMPLE_FMT_FLT))
         XCTAssertFalse(IRFFAudioDecoder.canUseDirectOutput(sampleFormat: AV_SAMPLE_FMT_NONE))
     }
+
+    func testInstanceQueueLifecycleAndInvalidPacketRemainCallable() {
+        var codecContext = AVCodecContext()
+        let delegate = AudioDecoderDelegateSpy(samplingRate: 48_000, channelCount: 2)
+
+        withUnsafeMutablePointer(to: &codecContext) { codecContextPointer in
+            let decoder = IRFFAudioDecoder.decoder(
+                codecContext: codecContextPointer,
+                timebase: 0.001,
+                delegate: delegate
+            )
+
+            XCTAssertEqual(decoder.size(), 0)
+            XCTAssertTrue(decoder.isEmpty())
+            XCTAssertEqual(decoder.duration(), 0)
+
+            let packet = AVPacket()
+            XCTAssertEqual(decoder.putPacket(packet), 0)
+
+            XCTAssertEqual(decoder.size(), 0)
+            XCTAssertTrue(decoder.isEmpty())
+            XCTAssertEqual(decoder.duration(), 0)
+
+            decoder.destroy()
+
+            XCTAssertNil(decoder.getFrameSync())
+        }
+
+        XCTAssertGreaterThanOrEqual(delegate.samplingRateRequestCount, 1)
+        XCTAssertGreaterThanOrEqual(delegate.channelCountRequestCount, 1)
+    }
+
+    func testPutPacketDecodesGeneratedPCM16AudioFrame() throws {
+        let url = try makeTinyPCM16WAVFile()
+        addTeardownBlock {
+            try? FileManager.default.removeItem(at: url)
+        }
+        let context = IRFFFormatContext(contentURL: url, videoFormat: .mpeg4)
+        addTeardownBlock {
+            context.destroy()
+        }
+        context.setupSync()
+
+        XCTAssertNil(context.error)
+        XCTAssertTrue(context.audioEnable)
+        XCTAssertFalse(context.audioTracks.isEmpty)
+        XCTAssertNotNil(context.audioCodecContext)
+
+        let codecContext = try XCTUnwrap(context.audioCodecContext)
+        let delegate = AudioDecoderDelegateSpy(samplingRate: 48_000, channelCount: 2)
+        let decoder = IRFFAudioDecoder.decoder(
+            codecContext: codecContext,
+            timebase: context.audioTimebase,
+            delegate: delegate
+        )
+
+        var decodedFrame: IRFFAudioFrame?
+        let audioTrackIndex = try XCTUnwrap(context.audioTrack?.index)
+        for _ in 0..<32 where decodedFrame == nil {
+            var packet = AVPacket()
+            guard context.readFrame(&packet) >= 0 else { break }
+            guard packet.stream_index == audioTrackIndex else { continue }
+
+            XCTAssertEqual(decoder.putPacket(packet), 0)
+            if !decoder.isEmpty() {
+                decodedFrame = decoder.getFrameSync()
+            }
+        }
+
+        let frame = try XCTUnwrap(decodedFrame)
+        XCTAssertGreaterThan(frame.duration, 0)
+        XCTAssertGreaterThan(frame.size, 0)
+        XCTAssertEqual(decoder.size(), 0)
+
+        decoder.flush()
+        XCTAssertTrue(decoder.isEmpty())
+    }
+}
+
+private final class AudioDecoderDelegateSpy: IRFFAudioDecoderDelegate {
+    private let samplingRate: Float64
+    private let channelCount: UInt32
+    private(set) var samplingRateRequestCount = 0
+    private(set) var channelCountRequestCount = 0
+
+    init(samplingRate: Float64, channelCount: UInt32) {
+        self.samplingRate = samplingRate
+        self.channelCount = channelCount
+    }
+
+    func audioDecoder(_ audioDecoder: IRFFAudioDecoder, samplingRate: inout Float64) {
+        samplingRateRequestCount += 1
+        samplingRate = self.samplingRate
+    }
+
+    func audioDecoder(_ audioDecoder: IRFFAudioDecoder, channelCount: inout UInt32) {
+        channelCountRequestCount += 1
+        channelCount = self.channelCount
+    }
 }

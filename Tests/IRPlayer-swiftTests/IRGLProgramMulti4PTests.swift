@@ -122,6 +122,49 @@ final class IRGLProgramMulti4PTests: XCTestCase {
         XCTAssertEqual(program.programs.map(\.viewprotRange), expectedQuadrants())
     }
 
+    func testDoubleTapUsesResetBlockBeforeChangingDisplayMode() {
+        let childPrograms = [
+            RecordingMulti4PChild(touchResult: true, currentScale: CGPoint(x: 1, y: 1)),
+            RecordingMulti4PChild(touchResult: false, currentScale: CGPoint(x: 1, y: 1))
+        ]
+        let program = IRGLProgramMulti4P(programs: childPrograms,
+                                         viewprotRange: CGRect(x: 0, y: 0, width: 400, height: 200))
+        var resetBlockCallCount = 0
+        program.doResetToDefaultScaleBlock = { receivedProgram in
+            resetBlockCallCount += 1
+            XCTAssertTrue(receivedProgram === program)
+            return true
+        }
+        XCTAssertTrue(program.touchedInProgram(CGPoint(x: 10, y: 10)))
+
+        program.didDoubleTap()
+
+        XCTAssertEqual(resetBlockCallCount, 1)
+        XCTAssertEqual(childPrograms[0].recordedEvents, [.doubleTap])
+        XCTAssertEqual(childPrograms[1].recordedEvents, [])
+        XCTAssertEqual(program.displayMode, .multiDisplay)
+    }
+
+    func testDoubleTapResetsTouchedProgramWhenScaleIsNotDefault() {
+        let childPrograms = [
+            RecordingMulti4PChild(touchResult: false, currentScale: CGPoint(x: 1, y: 1)),
+            RecordingMulti4PChild(touchResult: true, currentScale: CGPoint(x: 1, y: 1))
+        ]
+        childPrograms[1].tramsformController = FixedScaleTransformController(
+            scopeScale: CGPoint(x: 2, y: 1),
+            defaultScale: CGPoint(x: 1, y: 1)
+        )
+        let program = IRGLProgramMulti4P(programs: childPrograms,
+                                         viewprotRange: CGRect(x: 0, y: 0, width: 400, height: 200))
+        XCTAssertTrue(program.touchedInProgram(CGPoint(x: 10, y: 10)))
+
+        program.didDoubleTap()
+
+        XCTAssertEqual(childPrograms[0].recordedEvents, [])
+        XCTAssertEqual(childPrograms[1].recordedEvents, [.doubleTap])
+        XCTAssertEqual(program.displayMode, .multiDisplay)
+    }
+
     func testPanAndPinchAreForwardedOnlyToTouchedProgram() {
         let childPrograms = (0..<4).map { _ in makeChildProgram() }
         let controllers: [RecordingTransformController] = childPrograms.map { _ in
@@ -155,6 +198,35 @@ final class IRGLProgramMulti4PTests: XCTestCase {
         program.didPanByDegreeX(90, degreeY: -45)
 
         XCTAssertEqual(controllers[3].events.last, .scrollDegree(degreeX: 90, degreeY: -45))
+    }
+
+    func testScalePinchAndRotateAreForwardedOnlyToTouchedProgram() {
+        let childPrograms = [
+            RecordingMulti4PChild(touchResult: false, currentScale: CGPoint(x: 1, y: 1)),
+            RecordingMulti4PChild(touchResult: true, currentScale: CGPoint(x: 2, y: 3)),
+            RecordingMulti4PChild(touchResult: false, currentScale: CGPoint(x: 4, y: 5)),
+            RecordingMulti4PChild(touchResult: false, currentScale: CGPoint(x: 6, y: 7))
+        ]
+        let program = IRGLProgramMulti4P(programs: childPrograms,
+                                         viewprotRange: CGRect(x: 0, y: 0, width: 400, height: 200))
+        XCTAssertTrue(program.touchedInProgram(CGPoint(x: 10, y: 20)))
+
+        program.setDefaultScale(1.75)
+        let currentScale = program.getCurrentScale()
+        program.didPinchByfx(260, fy: 90, dsx: 1.5, dsy: 2.0)
+        program.didPinchByfx(265, fy: 95, sx: 8, sy: 9)
+        program.didRotate(.pi / 3)
+
+        XCTAssertEqual(currentScale, CGPoint(x: 2, y: 3))
+        XCTAssertEqual(childPrograms[0].recordedEvents, [])
+        XCTAssertEqual(childPrograms[2].recordedEvents, [])
+        XCTAssertEqual(childPrograms[3].recordedEvents, [])
+        XCTAssertEqual(childPrograms[1].recordedEvents, [
+            .defaultScale(1.75),
+            .pinch(fx: 260 - 200, fy: 90, sx: 1.5, sy: 2),
+            .pinch(fx: 265 - 200, fy: 95, sx: 8, sy: 9),
+            .rotate(.pi / 3)
+        ])
     }
 
     private func makeProgram() -> IRGLProgramMulti4P {
@@ -203,5 +275,77 @@ private final class RecordingTransformController: IRGLTransformController2D {
 
     func removeAllEvents() {
         events.removeAll()
+    }
+}
+
+private final class RecordingMulti4PChild: IRGLProgram2D {
+
+    enum Event: Equatable {
+        case defaultScale(Float)
+        case pinch(fx: Float, fy: Float, sx: Float, sy: Float)
+        case rotate(Float)
+        case doubleTap
+    }
+
+    private let touchResult: Bool
+    private let currentScale: CGPoint
+    private(set) var recordedEvents: [Event] = []
+
+    init(touchResult: Bool, currentScale: CGPoint) {
+        self.touchResult = touchResult
+        self.currentScale = currentScale
+        super.init(pixelFormat: .RGB_IRPixelFormat, viewportRange: .zero, parameter: nil)
+    }
+
+    override func touchedInProgram(_ touchedPoint: CGPoint) -> Bool {
+        touchResult
+    }
+
+    override func setDefaultScale(_ scale: Float) {
+        recordedEvents.append(.defaultScale(scale))
+    }
+
+    override func getCurrentScale() -> CGPoint {
+        currentScale
+    }
+
+    override func didPinchByfx(_ fx: Float, fy: Float, sx: Float, sy: Float) {
+        recordedEvents.append(.pinch(fx: fx, fy: fy, sx: sx, sy: sy))
+    }
+
+    override func didRotate(_ rotateRadians: Float) {
+        recordedEvents.append(.rotate(rotateRadians))
+    }
+
+    override func didDoubleTap() {
+        recordedEvents.append(.doubleTap)
+    }
+}
+
+private final class FixedScaleTransformController: IRGLTransformController {
+
+    private let scope: IRGLScope2D
+    private let defaultScale: CGPoint
+
+    init(scopeScale: CGPoint, defaultScale: CGPoint) {
+        self.scope = IRGLScope2D(
+            scaleX: Float(scopeScale.x),
+            scaleY: Float(scopeScale.y),
+            offsetX: 0,
+            offsetY: 0,
+            panDegree: 0,
+            w: 400,
+            h: 200
+        )
+        self.defaultScale = defaultScale
+        super.init()
+    }
+
+    override func getScope() -> IRGLScope2D {
+        scope
+    }
+
+    override func getDefaultTransformScale() -> CGPoint {
+        defaultScale
     }
 }

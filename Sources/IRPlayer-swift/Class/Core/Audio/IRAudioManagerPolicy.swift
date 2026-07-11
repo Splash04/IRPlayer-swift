@@ -24,6 +24,33 @@ enum IRAudioManagerPolicy {
         return nil
     }
 
+    static func interruptionEvent(typeValue: Any?,
+                                  optionValue: Any?) -> (type: IRAudioManagerInterruptionType,
+                                                         option: IRAudioManagerInterruptionOption)? {
+        guard let rawType = unsignedInteger(from: typeValue),
+              let avType = AVAudioSession.InterruptionType(rawValue: rawType) else {
+            return nil
+        }
+
+        let type: IRAudioManagerInterruptionType = (avType == .ended) ? .ended : .begin
+        var option: IRAudioManagerInterruptionOption = .none
+        if let avOption = unsignedInteger(from: optionValue),
+           avOption == AVAudioSession.InterruptionOptions.shouldResume.rawValue {
+            option = .shouldResume
+        }
+
+        return (type, option)
+    }
+
+    static func routeChangeReason(from value: Any?) -> IRAudioManagerRouteChangeReason? {
+        guard let rawReason = unsignedInteger(from: value),
+              let avReason = AVAudioSession.RouteChangeReason(rawValue: rawReason),
+              avReason == .oldDeviceUnavailable else {
+            return nil
+        }
+        return .oldDeviceUnavailable
+    }
+
     static func requiredAudioGraph(_ graph: AUGraph?, domain: String) -> Result<AUGraph, NSError> {
         guard let graph else {
             return .failure(NSError(domain: domain, code: -1, userInfo: nil))
@@ -43,6 +70,17 @@ enum IRAudioManagerPolicy {
 
         let (sampleCount, overflow) = Int(numberOfFrames).multipliedReportingOverflow(by: Int(numberOfChannels))
         guard !overflow, sampleCount > 0 else { return nil }
+        return sampleCount
+    }
+
+    static func renderSampleCount(numberOfFrames: UInt32,
+                                  numberOfChannels: UInt32,
+                                  maximumSampleCount: Int) -> Int? {
+        guard maximumSampleCount > 0 else { return nil }
+        guard let sampleCount = renderSampleCount(numberOfFrames: numberOfFrames, numberOfChannels: numberOfChannels) else {
+            return nil
+        }
+        guard sampleCount <= maximumSampleCount else { return nil }
         return sampleCount
     }
 }

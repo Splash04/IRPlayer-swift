@@ -31,4 +31,26 @@ final class IRPlayerDecoderTests: XCTestCase {
         XCTAssertEqual(decoder.decoderTypeForContentURL(contentURL: NSURL(string: "https://example.com/video.unknown")), .ffmpeg)
         XCTAssertEqual(decoder.decoderTypeForContentURL(contentURL: nil), .error)
     }
+
+    func testAVPlayerDecoderFactoryRoutesEveryKnownFormatToAVPlayer() {
+        let decoder = IRPlayerDecoder.AVPlayerDecoder()
+
+        XCTAssertEqual(decoder.decoderTypeForContentURL(contentURL: NSURL(string: "https://example.com/video.mp4")), .avPlayer)
+        XCTAssertEqual(decoder.decoderTypeForContentURL(contentURL: NSURL(string: "https://example.com/video.flv")), .avPlayer)
+        XCTAssertEqual(decoder.decoderTypeForContentURL(contentURL: NSURL(string: "https://example.com/live.m3u8")), .avPlayer)
+        XCTAssertEqual(decoder.decoderTypeForContentURL(contentURL: NSURL(string: "rtmp://example.com/live")), .avPlayer)
+        XCTAssertEqual(decoder.decoderTypeForContentURL(contentURL: NSURL(string: "rtsp://example.com/live")), .avPlayer)
+        XCTAssertEqual(decoder.decoderTypeForContentURL(contentURL: NSURL(string: "https://example.com/video.unknown")), .avPlayer)
+    }
+
+    func testDefaultDecoderUsesMixedFormatPolicy() {
+        let decoder = IRPlayerDecoder.defaultDecoder()
+
+        XCTAssertEqual(decoder.decoderTypeForContentURL(contentURL: NSURL(string: "https://example.com/video.mp4")), .avPlayer)
+        XCTAssertEqual(decoder.decoderTypeForContentURL(contentURL: NSURL(string: "https://example.com/video.flv")), .ffmpeg)
+        XCTAssertEqual(decoder.decoderTypeForContentURL(contentURL: NSURL(string: "https://example.com/live.m3u8")), .avPlayer)
+        XCTAssertEqual(decoder.decoderTypeForContentURL(contentURL: NSURL(string: "rtmp://example.com/live")), .ffmpeg)
+        XCTAssertEqual(decoder.decoderTypeForContentURL(contentURL: NSURL(string: "rtsp://example.com/live")), .ffmpeg)
+        XCTAssertEqual(decoder.decoderTypeForContentURL(contentURL: NSURL(string: "https://example.com/video.unknown")), .ffmpeg)
+    }
 }

@@ -411,37 +411,7 @@ public class IRGLView: UIView, IRFFDecoderVideoOutput {
     }
 
     private static func translationVector(for program: IRGLProgram2D?) -> SIMD2<Float> {
-        guard let scope = program?.tramsformController?.getScope(),
-              scope.w > 0,
-              scope.h > 0,
-              scope.scaleX.isFinite,
-              scope.scaleY.isFinite,
-              scope.offsetX.isFinite,
-              scope.offsetY.isFinite,
-              scope.scaleX > 0,
-              scope.scaleY > 0 else {
-            return SIMD2<Float>(repeating: 0)
-        }
-
-        // When scale >= 1 the content overflows the viewport and the offset-based
-        // translation positions the visible region correctly. When scale < 1 the
-        // content fits inside the viewport; Metal's computeScale already centers it,
-        // so the translation must be zero.
-        let tx: Float
-        if scope.scaleX >= 1.0 {
-            tx = (scope.offsetX * scope.scaleX * 2 / Float(scope.w)) + 1.0 - scope.scaleX
-        } else {
-            tx = 0
-        }
-
-        let ty: Float
-        if scope.scaleY >= 1.0 {
-            ty = -((scope.offsetY * scope.scaleY * 2 / Float(scope.h)) + 1.0 - scope.scaleY)
-        } else {
-            ty = 0
-        }
-
-        return SIMD2<Float>(tx, ty)
+        IRGLViewPolicy.translationVector(for: program?.tramsformController?.getScope())
     }
 
     static func fittedImageTransform(imageExtent: CGRect,
@@ -719,6 +689,8 @@ public class IRGLView: UIView, IRFFDecoderVideoOutput {
         }
 
         if let pixUV = params.consumePixUVIfReady() {
+            defer { params.releaseConsumedPixUV(pixUV) }
+
             let texCount = min(pixUV.count, antialias * antialias)
             var newTextures: [MTLTexture] = []
             newTextures.reserveCapacity(texCount)

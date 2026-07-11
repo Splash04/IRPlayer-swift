@@ -94,6 +94,25 @@ final class IRGLProgram2DFisheye2PanoTests: XCTestCase {
         XCTAssertEqual(params.textureHeight, 24)
     }
 
+    func testProgramSetRenderFrameIgnoresUnchangedFish2PanoTextureSize() throws {
+        let program = IRGLProgram2DFisheye2Pano(pixelFormat: .RGB_IRPixelFormat,
+                                                viewportRange: .zero,
+                                                parameter: nil)
+        let params = try XCTUnwrap(program.metalFish2PanoParams)
+        params.textureWidth = 32
+        params.textureHeight = 24
+        params.outputWidth = 123
+        params.outputHeight = 45
+        let frame = IRFFVideoFrame()
+        frame.width = 32
+        frame.height = 24
+
+        program.setRenderFrame(frame)
+
+        XCTAssertEqual(params.outputWidth, 123)
+        XCTAssertEqual(params.outputHeight, 45)
+    }
+
     func testProgramHorizontalBoundsScrollWrapsFish2PanoOffset() throws {
         let program = IRGLProgram2DFisheye2Pano(pixelFormat: .RGB_IRPixelFormat,
                                                 viewportRange: .zero,
@@ -115,6 +134,64 @@ final class IRGLProgram2DFisheye2PanoTests: XCTestCase {
 
         XCTAssertFalse(shouldContinue)
         XCTAssertEqual(params.offsetX, -50, accuracy: 0.0001)
+    }
+
+    func testProgramHorizontalBoundsScrollStopsWhenTransformControllerIsMissing() throws {
+        let program = IRGLProgram2DFisheye2Pano(pixelFormat: .RGB_IRPixelFormat,
+                                                viewportRange: .zero,
+                                                parameter: nil)
+        let params = try XCTUnwrap(program.metalFish2PanoParams)
+        params.outputWidth = 100
+        params.offsetX = 25
+
+        program.willScroll(dx: 50, dy: 0, transformController: Fish2PanoRecordingTransformController(scope: IRGLScope2D()))
+        let shouldContinue = program.doScrollHorizontal(status: .toMinX, transformController: IRGLTransformController())
+
+        XCTAssertFalse(shouldContinue)
+        XCTAssertEqual(params.offsetX, 25)
+    }
+
+    func testProgramHorizontalBoundsScrollStopsWhenOffsetCannotNormalize() throws {
+        let program = IRGLProgram2DFisheye2Pano(pixelFormat: .RGB_IRPixelFormat,
+                                                viewportRange: .zero,
+                                                parameter: nil)
+        let params = try XCTUnwrap(program.metalFish2PanoParams)
+        params.outputWidth = 0
+        params.offsetX = 25
+        let controller = Fish2PanoRecordingTransformController(scope: IRGLScope2D(scaleX: 2,
+                                                                                  scaleY: 1,
+                                                                                  offsetX: 0,
+                                                                                  offsetY: 0,
+                                                                                  panDegree: 0,
+                                                                                  w: 50,
+                                                                                  h: 50))
+        program.tramsformController = controller
+
+        program.willScroll(dx: 50, dy: 0, transformController: controller)
+        let shouldContinue = program.doScrollHorizontal(status: .toMaxX, transformController: controller)
+
+        XCTAssertFalse(shouldContinue)
+        XCTAssertEqual(params.offsetX, 25)
+    }
+
+    func testProgramScrollContinuesForVerticalBounds() {
+        let program = IRGLProgram2DFisheye2Pano(pixelFormat: .RGB_IRPixelFormat,
+                                                viewportRange: .zero,
+                                                parameter: nil)
+
+        let shouldContinue = program.doScrollHorizontal(status: .toMaxY, transformController: IRGLTransformController())
+
+        XCTAssertTrue(shouldContinue)
+    }
+
+    func testProgramDoubleTapRemainsCallableWithoutTransformController() {
+        let program = IRGLProgram2DFisheye2Pano(pixelFormat: .RGB_IRPixelFormat,
+                                                viewportRange: .zero,
+                                                parameter: nil)
+
+        program.didDoubleTap()
+
+        XCTAssertNotNil(program.metalFish2PanoParams)
     }
 
     func testPanoShaderParamsDefaultValuesMatchExpectedProjectionInputs() {
@@ -154,6 +231,97 @@ final class IRGLProgram2DFisheye2PanoTests: XCTestCase {
         XCTAssertEqual(params.outputWidth, 1024)
         XCTAssertEqual(params.outputHeight, 0)
         XCTAssertTrue(delegate.outputSizes.isEmpty)
+    }
+
+    func testPanoShaderParamsConsumePixUVWhenMapIsReady() throws {
+        let params = IRGLFish2PanoShaderParams()
+
+        XCTAssertNil(params.consumePixUVIfReady())
+
+        params.updateTextureWidth(32, height: 24)
+        let pixUV = try waitForPixUV(from: params)
+
+        XCTAssertEqual(pixUV.count, 1)
+        params.releaseConsumedPixUV(pixUV)
+        XCTAssertNil(params.consumePixUVIfReady())
+    }
+
+    func testPanoShaderParamsPublishesOnlyLatestPixelMapGeneration() throws {
+        let params = IRGLFish2PanoShaderParams()
+        params.antialias = 2
+
+        params.updateTextureWidth(256, height: 192)
+        params.updateTextureWidth(32, height: 24)
+        let pixUV = try waitForPixUV(from: params)
+
+        XCTAssertEqual(pixUV.count, 4)
+        XCTAssertEqual(params.textureWidth, 32)
+        XCTAssertEqual(params.textureHeight, 24)
+        params.releaseConsumedPixUV(pixUV)
+        XCTAssertNil(params.consumePixUVIfReady())
+    }
+
+    func testPanoShaderParamsReleaseConsumedPixUVIsIdempotent() throws {
+        let params = IRGLFish2PanoShaderParams()
+
+        params.updateTextureWidth(32, height: 24)
+        let pixUV = try waitForPixUV(from: params)
+
+        params.releaseConsumedPixUV(pixUV)
+        params.releaseConsumedPixUV(pixUV)
+
+        XCTAssertNil(params.consumePixUVIfReady())
+    }
+
+    func testPanoShaderParamsReleaseConsumedPixUVIgnoresMismatchedBuffers() throws {
+        let params = IRGLFish2PanoShaderParams()
+
+        params.updateTextureWidth(32, height: 24)
+        let pixUV = try waitForPixUV(from: params)
+        let unrelated = UnsafeMutablePointer<GLfloat>.allocate(capacity: 2)
+        defer { unrelated.deallocate() }
+
+        params.releaseConsumedPixUV([])
+        params.releaseConsumedPixUV([unrelated])
+        params.releaseConsumedPixUV(pixUV)
+
+        XCTAssertNil(params.consumePixUVIfReady())
+    }
+
+    func testPanoShaderParamsSetPixelFactorsRejectsInvalidCoordinates() {
+        let params = IRGLFish2PanoShaderParams()
+        params.outputWidth = 2
+        params.outputHeight = 2
+
+        params.setPixelFactors(0, 0, 0, -1, 0, 0, 0, 0, 1)
+
+        XCTAssertNil(params.consumePixUVIfReady())
+    }
+
+    func testPanoShaderParamsSetPixelFactorsHandlesTransformAndOutOfRangeU() {
+        let params = IRGLFish2PanoShaderParams()
+        params.textureWidth = 10
+        params.textureHeight = 10
+        params.fishcenterx = 20
+        params.fishcentery = 5
+        params.fishradiush = 1
+        params.outputWidth = 2
+        params.outputHeight = 2
+
+        params.setPixelFactors(0, 0, 0, 0, 0, 0.25, 0.5, 0, 1)
+
+        XCTAssertNil(params.consumePixUVIfReady())
+    }
+
+    func testPanoShaderParamsUpdateOutputIgnoresInvalidTextureSize() {
+        let params = IRGLFish2PanoShaderParams()
+        params.textureWidth = 0
+        params.textureHeight = 24
+
+        params.updateOutputWH()
+
+        XCTAssertEqual(params.outputWidth, 1024)
+        XCTAssertEqual(params.outputHeight, 0)
     }
 
     func testPanoShaderParamsHugeTextureUpdateDoesNotBuildOutputMap() {
@@ -219,6 +387,11 @@ final class IRGLProgram2DFisheye2PanoTests: XCTestCase {
         XCTAssertEqual(IRGLFish2PanoShaderParams.pixelMapUVOffset(outputWidth: 10, outputHeight: 20, x: 3, y: 2), 46)
     }
 
+    func testPanoPixelMapGenerationRejectsStaleJobs() {
+        XCTAssertTrue(IRGLFish2PanoShaderParamsPolicy.shouldPublishPixelMap(jobGeneration: 2, currentGeneration: 2))
+        XCTAssertFalse(IRGLFish2PanoShaderParamsPolicy.shouldPublishPixelMap(jobGeneration: 1, currentGeneration: 2))
+    }
+
     func testNormalizedOffsetRejectsInvalidOutputWidth() {
         XCTAssertNil(IRGLProgram2DFisheye2Pano.normalizedOffsetX(currentOffset: 0, delta: 20, outputWidth: 0))
         XCTAssertNil(IRGLProgram2DFisheye2Pano.normalizedOffsetX(currentOffset: 0, delta: 20, outputWidth: -1))
@@ -261,6 +434,23 @@ final class IRGLProgram2DFisheye2PanoTests: XCTestCase {
         XCTAssertEqual(value.x, x, accuracy: 0.0001, file: file, line: line)
         XCTAssertEqual(value.y, y, accuracy: 0.0001, file: file, line: line)
         XCTAssertEqual(value.z, z, accuracy: 0.0001, file: file, line: line)
+    }
+
+    private func waitForPixUV(
+        from params: IRGLFish2PanoShaderParams,
+        timeout: TimeInterval = 1,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) throws -> [UnsafeMutablePointer<GLfloat>] {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if let pixUV = params.consumePixUVIfReady() {
+                return pixUV
+            }
+            RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.01))
+        }
+        XCTFail("Expected fish2pano pixel map to become ready", file: file, line: line)
+        throw XCTSkip("Pixel map did not become ready before timeout")
     }
 }
 
